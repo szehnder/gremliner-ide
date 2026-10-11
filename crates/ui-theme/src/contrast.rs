@@ -177,3 +177,39 @@ fn contrast_formula_matches_wcag_reference() {
     assert!((contrast_ratio(black, white) - 21.0).abs() < 0.01);
     assert!((contrast_ratio(white, white) - 1.0).abs() < 0.001);
 }
+
+/// Every syntax colour in both themes is readable on the editor background (AA, 4.5:1).
+#[test]
+fn syntax_colours_meet_contrast_on_editor_background() {
+    let set: serde_json::Value = serde_json::from_str(THEME_SET_JSON).unwrap();
+    let hex = |s: &str| -> Hsla {
+        let s = s.trim_start_matches('#');
+        let channel = |i: usize| f32::from(u8::from_str_radix(&s[i..i + 2], 16).unwrap()) / 255.0;
+        Hsla::from(gpui_kit::Rgba {
+            r: channel(0),
+            g: channel(2),
+            b: channel(4),
+            a: 1.0,
+        })
+    };
+    let mut failures = Vec::new();
+    for theme in set["themes"].as_array().unwrap() {
+        let name = theme["name"].as_str().unwrap();
+        let highlight = &theme["highlight"];
+        let bg = hex(highlight["editor.background"].as_str().unwrap());
+        for (role, style) in highlight["syntax"].as_object().unwrap() {
+            if let Some(color) = style["color"].as_str() {
+                let ratio = contrast_ratio(hex(color), bg);
+                if ratio < AA_TEXT {
+                    failures.push(format!("{name}: syntax `{role}` is {ratio:.2}:1"));
+                }
+            }
+        }
+        let fg = hex(highlight["editor.foreground"].as_str().unwrap());
+        assert!(
+            contrast_ratio(fg, bg) >= AA_TEXT,
+            "{name}: editor foreground"
+        );
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

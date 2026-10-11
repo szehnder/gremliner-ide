@@ -8,8 +8,10 @@
 mod connections;
 mod migrations;
 pub mod secrets;
+mod tabs;
 
 pub use connections::ConnectionRow;
+pub use tabs::TabRow;
 
 use std::future::Future;
 use std::path::{Path, PathBuf};

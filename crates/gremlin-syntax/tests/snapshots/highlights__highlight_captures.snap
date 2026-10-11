@@ -3,22 +3,22 @@ source: crates/gremlin-syntax/tests/highlights.rs
 expression: "lines.join(\"\\n\")"
 ---
 comment              // top airports
+variable.special     g
 variable             g
-variable.builtin     g
-function.method      V
-function.method      hasLabel
+function             V
+function             hasLabel
 string               'airport'
-function.method      has
+function             has
 string               'runways'
-variable             P
 type                 P
-function.method      gt
+variable             P
+function             gt
 number               3
-function.method      order
-function.method      by
+function             order
+function             by
 string               'elev'
-constant.builtin     desc
-function.method      limit
+constant             desc
+function             limit
 number               5L
-function.method      valueMap
+function             valueMap
 boolean              true

@@ -17,8 +17,8 @@ use storage::Storage;
 use crate::actions::*;
 use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
 use crate::panels::{
-    ConnectionsPanel, InspectorPanel, ResultsPanel, SettingsPanel, WelcomePanel, WorkspacePanel,
-    confirm_reset_general,
+    ConnectionsPanel, EditorPanel, EditorTabs, InspectorPanel, ResultsPanel, SettingsPanel,
+    WelcomePanel, WorkspacePanel, confirm_reset_general,
 };
 use crate::perf_hud::PerfHud;
 use crate::persist::{self, LAYOUT_VERSION, LayoutProblem, WindowGeometry};
@@ -48,7 +48,9 @@ pub struct Workspace {
 impl Workspace {
     pub fn new(options: WorkspaceOptions, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let storage = AppSettings::storage(cx).cloned();
-        let (dock, _skin) = DockSkin::dock_area("workspace", Some(LAYOUT_VERSION), window, cx);
+        let (dock, skin) = DockSkin::dock_area("workspace", Some(LAYOUT_VERSION), window, cx);
+        // Editor tabs can be closed; fixed panels opt out through `closable()`.
+        skin.set_close_button_visible(true, cx);
 
         let restored = storage
             .as_ref()
@@ -73,6 +75,17 @@ impl Workspace {
         });
         if !loaded {
             Self::install_default_layout(&dock, window, cx);
+            // Tabs survive an unreadable layout: reopen whatever is stored.
+            let rows = storage
+                .as_ref()
+                .and_then(|s| s.list_tabs_blocking().ok())
+                .unwrap_or_default();
+            for row in rows {
+                let tab = EditorPanel::from_row(row, window, cx);
+                dock.update(cx, |dock, cx| {
+                    dock.add_panel_view(panel_handle(tab), DockPlacement::Center, None, window, cx);
+                });
+            }
         }
 
         let subscriptions = vec![
@@ -86,6 +99,11 @@ impl Workspace {
                 AppSettings::set_appearance(window.appearance(), cx);
             }),
             cx.observe_window_bounds(window, |this, window, cx| this.schedule_save(window, cx)),
+            // The welcome view hides while tabs are open; re-render the dock when that changes.
+            cx.observe(&EditorTabs::global(cx), |this, _, cx| {
+                this.dock.update(cx, |_, cx| cx.notify());
+                cx.notify();
+            }),
         ];
         // Closing the window saves immediately; the debounce may still be pending.
         let weak = cx.weak_entity();
@@ -183,6 +201,9 @@ impl Workspace {
     /// Write the layout and window geometry now.
     pub fn save_now(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.save_task = None;
+        for tab in EditorTabs::global(cx).read(cx).tabs() {
+            tab.update(cx, |tab, cx| tab.save_now(cx));
+        }
         let Some(storage) = &self.storage else { return };
         persist::save_dock(storage, &self.dock.read(cx).dump(cx), cx);
         persist::save_window(
@@ -210,9 +231,8 @@ impl Workspace {
                 crate::connections::ConnStatus::Connected(_)
             )
         });
-        // Editors arrive with the query-editor change.
         CommandContext {
-            editor_open: false,
+            editor_open: EditorTabs::global(cx).read(cx).any_open(),
             connected,
         }
     }
@@ -305,6 +325,64 @@ impl Workspace {
                 .w(Tokens::SHORTCUTS_WIDTH)
                 .margin_top(Tokens::DIALOG_TOP)
                 .child(v_flex().id("shortcuts").children(rows))
+        });
+    }
+
+    /// Open a new editor tab in the editor area and focus it.
+    pub fn new_tab(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<EditorPanel> {
+        let tab = EditorPanel::new_tab(window, cx);
+        let handle = panel_handle(tab.clone());
+        self.dock.update(cx, |dock, cx| {
+            dock.add_panel_view(handle, DockPlacement::Center, None, window, cx);
+        });
+        let editor = tab.read(cx).editor().clone();
+        editor.update(cx, |e, cx| e.focus(window, cx));
+        tab
+    }
+
+    /// The editor tab holding focus, or the most recently opened one.
+    pub fn current_tab(&self, window: &Window, cx: &App) -> Option<Entity<EditorPanel>> {
+        let tabs = EditorTabs::global(cx).read(cx).tabs();
+        tabs.iter()
+            .find(|t| {
+                let editor = t.read(cx).editor().read(cx);
+                editor
+                    .state()
+                    .read(cx)
+                    .focus_handle(cx)
+                    .contains_focused(window, cx)
+            })
+            .cloned()
+            .or_else(|| tabs.last().cloned())
+    }
+
+    /// Move the current tab into a new column to the right.
+    pub fn split_right(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let Some(tab) = self.current_tab(window, cx) else {
+            return;
+        };
+        let panel = gpui_kit::component::dock::PanelId::from(tab.entity_id());
+        let node = self
+            .dock
+            .read(cx)
+            .layout(DockPlacement::Center)
+            .and_then(|tree| tree.find_panel_node(panel));
+        let Some(node) = node else { return };
+        self.dock.update(cx, |dock, cx| {
+            dock.move_panel(
+                panel,
+                gpui_kit::component::dock::InsertTarget::Split {
+                    node,
+                    placement: gpui_kit::component::Placement::Right,
+                    size: None,
+                },
+                window,
+                cx,
+            );
         });
     }
 
@@ -432,6 +510,18 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &ResetLayout, window, cx| {
                 Self::install_default_layout(&this.dock, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &NewQueryTab, window, cx| {
+                this.new_tab(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &SplitRight, window, cx| this.split_right(window, cx)))
+            .on_action(cx.listener(|this, _: &SaveQuery, window, cx| {
+                if let Some(tab) = this.current_tab(window, cx) {
+                    tab.update(cx, |tab, cx| {
+                        tab.mark_saved(cx);
+                        tab.save_now(cx);
+                    });
+                }
             }))
             .on_action(cx.listener(|this, _: &ZoomIn, _, cx| this.zoom(Some(FONT_SIZE_STEP), cx)))
             .on_action(cx.listener(|this, _: &ZoomOut, _, cx| this.zoom(Some(-FONT_SIZE_STEP), cx)))

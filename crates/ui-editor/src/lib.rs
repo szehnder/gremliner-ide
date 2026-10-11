@@ -1,11 +1,12 @@
-//! Gremlin editor built on the gpui-kit code editor.
-//!
-//! See `AGENTS.md` for crate layering rules and `openspec/ROADMAP.md` for the change that fills this crate in.
+//! The Gremlin query editor: gpui-kit's code editor with tree-sitter-gremlin highlighting, diagnostics from
+//! `gremlin-syntax`, hover docs, format, comment toggling and run requests.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_compiles() {
-        assert_eq!(env!("CARGO_PKG_NAME"), "ui-editor");
-    }
-}
+pub mod actions;
+pub mod comment;
+pub mod editor;
+pub mod hover;
+pub mod language;
+mod tokens;
+
+pub use editor::{KEY_CONTEXT, QueryEditor, QueryEditorEvent};
+pub use language::{LANGUAGE_NAME, register};

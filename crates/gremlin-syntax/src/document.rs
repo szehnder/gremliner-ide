@@ -108,6 +108,16 @@ impl Document {
         &self.text
     }
 
+    /// A copy that can be edited independently (e.g. on a background thread); the syntax tree is shared
+    /// until edited, so this is cheap apart from copying the text.
+    pub fn fork(&self) -> Document {
+        Document {
+            text: self.text.clone(),
+            tree: self.tree.clone(),
+            parser: new_parser(),
+        }
+    }
+
     pub fn tree(&self) -> &Tree {
         &self.tree
     }
@@ -156,11 +166,22 @@ impl Document {
             .collect()
     }
 
+    pub fn statement_count(&self) -> usize {
+        self.statement_nodes().len()
+    }
+
     /// The statement containing `offset` (a cursor between statements belongs to the one it touches).
     pub fn statement_at(&self, offset: usize) -> Option<Statement> {
-        self.statements()
+        self.statement_nodes()
             .into_iter()
-            .find(|s| s.range.start <= offset && offset <= s.range.end)
+            .enumerate()
+            .find(|(_, n)| n.start_byte() <= offset && offset <= n.end_byte())
+            .map(|(index, node)| Statement {
+                index,
+                range: node.byte_range(),
+                text: self.text[node.byte_range()].to_owned(),
+                has_error: node.has_error() || node.is_error(),
+            })
     }
 
     fn node_of(&self, statement: &Statement) -> Option<Node<'_>> {
@@ -171,38 +192,31 @@ impl Document {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         collect_syntax_errors(self.tree.root_node(), &self.text, &mut out);
-        for statement in self.statements() {
-            for step in self.steps(&statement).iter().flat_map(StepNode::walk) {
-                if step.is_gremlin() && !Catalogue::get().is_known_name(&step.name) {
-                    out.push(Diagnostic {
-                        severity: Severity::Warning,
-                        range: step.name_span.clone(),
-                        message: format!("Unknown step `{}`", step.name),
-                    });
-                }
-            }
-        }
+        unknown_steps(self.tree.root_node(), &self.text, &mut out);
         out.sort_by_key(|d| (d.range.start, d.range.end));
         out
     }
 
     /// The step tree of a statement.
     pub fn steps(&self, statement: &Statement) -> Vec<StepNode> {
-        let Some(node) = self.node_of(statement) else {
-            return Vec::new();
-        };
-        let mut next_id = 0;
-        let mut out = Vec::new();
-        for traversal in top_traversals(node) {
-            out.extend(chain_steps(traversal, &self.text, 0, &mut next_id));
-        }
-        out
+        self.node_of(statement)
+            .map(|node| steps_of(node, &self.text))
+            .unwrap_or_default()
     }
 
     pub fn analyze(&self, statement: &Statement) -> StatementAnalysis {
-        let steps = self.steps(statement);
-        let catalogue = Catalogue::get();
         let node = self.node_of(statement);
+        self.analyze_node(statement, node, &self.assigned_names())
+    }
+
+    fn analyze_node(
+        &self,
+        statement: &Statement,
+        node: Option<Node<'_>>,
+        assigned: &HashSet<String>,
+    ) -> StatementAnalysis {
+        let steps = node.map(|n| steps_of(n, &self.text)).unwrap_or_default();
+        let catalogue = Catalogue::get();
         let has_lambda = node.is_some_and(|n| contains_kind(n, "lambda"));
         let mutating_step = steps
             .iter()
@@ -210,7 +224,9 @@ impl Document {
             .any(|s| catalogue.step(&s.name).is_some_and(|i| i.mutating));
         StatementAnalysis {
             is_mutating: statement.has_error || has_lambda || mutating_step,
-            parameters: node.map(|n| self.parameters_in(n)).unwrap_or_default(),
+            parameters: node
+                .map(|n| self.parameters_in(n, assigned))
+                .unwrap_or_default(),
             steps,
             statement: statement.clone(),
         }
@@ -218,7 +234,12 @@ impl Document {
 
     /// Every statement analysed.
     pub fn analyze_all(&self) -> Vec<StatementAnalysis> {
-        self.statements().iter().map(|s| self.analyze(s)).collect()
+        let assigned = self.assigned_names();
+        self.statements()
+            .iter()
+            .zip(self.statement_nodes())
+            .map(|(s, node)| self.analyze_node(s, Some(node), &assigned))
+            .collect()
     }
 
     /// Names assigned anywhere in the document (`x = ...`), which are therefore not parameters.
@@ -231,8 +252,7 @@ impl Document {
             .collect()
     }
 
-    fn parameters_in(&self, node: Node<'_>) -> Vec<String> {
-        let assigned = self.assigned_names();
+    fn parameters_in(&self, node: Node<'_>, assigned: &HashSet<String>) -> Vec<String> {
         let catalogue = Catalogue::get();
         let mut out: Vec<String> = Vec::new();
         visit(node, &mut |n| {
@@ -266,6 +286,55 @@ impl Document {
         }
         None
     }
+}
+
+/// Warnings for calls in Gremlin chains whose names the catalogue does not know. Walks the tree once
+/// without building step trees (this runs on every keystroke).
+fn unknown_steps(node: Node<'_>, text: &str, out: &mut Vec<Diagnostic>) {
+    if node.kind() == "lambda" {
+        return;
+    }
+    if node.kind() == "traversal" {
+        let catalogue = Catalogue::get();
+        let root = node.child_by_field_name("root");
+        let gremlin = match root {
+            Some(r) if r.kind() == "identifier" => matches!(&text[r.byte_range()], "g" | "__"),
+            Some(_) => true,
+            None => false,
+        };
+        if gremlin {
+            let mut cursor = node.walk();
+            for child in node.named_children(&mut cursor) {
+                if child.kind() != "call" {
+                    continue;
+                }
+                if let Some(name) = child.child_by_field_name("name") {
+                    let name_text = &text[name.byte_range()];
+                    if !catalogue.is_known_name(name_text) {
+                        out.push(Diagnostic {
+                            severity: Severity::Warning,
+                            range: name.byte_range(),
+                            message: format!("Unknown step `{name_text}`"),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        unknown_steps(child, text, out);
+    }
+}
+
+/// The step tree of one statement node.
+fn steps_of(node: Node<'_>, text: &str) -> Vec<StepNode> {
+    let mut next_id = 0;
+    let mut out = Vec::new();
+    for traversal in top_traversals(node) {
+        out.extend(chain_steps(traversal, text, 0, &mut next_id));
+    }
+    out
 }
 
 /// Group the flat top-level step list back into one list per top-level traversal.

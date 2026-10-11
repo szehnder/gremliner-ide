@@ -42,6 +42,11 @@ impl BasePanel for WelcomePanel {
     fn zoomable(&self, _: &App) -> bool {
         false
     }
+
+    /// Shown only while no editor tab is open.
+    fn visible(&self, cx: &App) -> bool {
+        !super::EditorTabs::global(cx).read(cx).any_open()
+    }
 }
 
 impl Panel for WelcomePanel {

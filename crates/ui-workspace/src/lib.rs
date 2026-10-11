@@ -14,12 +14,12 @@ pub mod perf_hud;
 pub mod persist;
 pub mod settings;
 pub mod status_bar;
-pub mod theme;
 pub mod workspace;
 
 use gpui_kit::App;
 use storage::{Storage, Table};
 
+pub use ui_theme as theme;
 pub use workspace::{Workspace, WorkspaceOptions};
 
 use crate::actions::*;
@@ -39,6 +39,8 @@ pub struct ShellConfig {
 /// Initialise the shell. Call after `gpui_kit::init` and `io::install`.
 pub fn init(config: ShellConfig, cx: &mut App) {
     theme::init(cx);
+    ui_editor::register();
+    panels::EditorTabs::init(cx);
     keymap::bind_default_keys(cx);
     panels::register_builtin(cx);
     register_commands(cx);
@@ -93,7 +95,15 @@ fn register_commands(cx: &mut App) {
             .keywords(&["keymap", "bindings"]),
         CommandMeta::new("Connection", "Add Connection", AddConnection)
             .keywords(&["new", "connect"]),
+        CommandMeta::new("Editor", "New Query Tab", NewQueryTab).keywords(&["editor", "open"]),
+        CommandMeta::new("Editor", "Run Query", editor::RunQuery)
+            .when(When::EditorOpen)
+            .keywords(&["execute"]),
         CommandMeta::new("Editor", "Format Query", editor::FormatQuery).when(When::EditorOpen),
+        CommandMeta::new("Editor", "Toggle Line Comment", editor::ToggleLineComment)
+            .when(When::EditorOpen),
+        CommandMeta::new("Editor", "Split Right", SplitRight).when(When::EditorOpen),
+        CommandMeta::new("Editor", "Save Query", SaveQuery).when(When::EditorOpen),
         CommandMeta::new("Application", "Quit", Quit).keywords(&["exit"]),
     ] {
         CommandRegistry::register(cx, meta);

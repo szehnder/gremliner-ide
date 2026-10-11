@@ -25,6 +25,7 @@ const IO: &[&str] = &[
     "gremliner-cli",
 ];
 const UI: &[&str] = &[
+    "ui-theme",
     "graph-canvas",
     "ui-editor",
     "ui-results",

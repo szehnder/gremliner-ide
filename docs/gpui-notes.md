@@ -72,3 +72,29 @@ Lessons learned while building with gpui-kit 0.7.x (`gpui-pre` 0.3.x). Add to th
   headless tests and logs (`RUST_LOG=ui_workspace=info` logs connection status changes). Interactive
   launches by the user are not affected in the same way; see `docs/benchmarks/graph-canvas-spike.md` for the
   frame-pacing notes from the render gate.
+
+## Code editor (query-editor)
+- `EditorState::new(window, cx).language("gremlin").default_value(..)` + `Editor::new(&state)`. Register a
+  tree-sitter language with `component::highlighter::LanguageRegistry::singleton().register(name,
+  &LanguageConfig::new(name, language, vec![], highlights, "", ""))` (gpui-kit feature `tree-sitter`). The
+  grammar must use the same `tree-sitter` crate version as gpui-kit (0.26).
+- **Highlight queries:** only gpui-kit's capture names are themed (`function`, `variable.special`, `type`,
+  `constant`, `string`, ...; dotted names fall back to their prefix), and **the first matching pattern
+  wins** for a node, so put specific patterns before general ones. Editor colours come from the theme's
+  `highlight` section (`editor.background`, `syntax.*`); without one a dark theme gets a white editor.
+- `set_value` does not emit `InputEvent::Change` (no events while setting); mirror programmatic changes
+  yourself (`QueryEditor::set_text`). `replace_all` is one undoable edit (use it for formatting);
+  `replace` replaces the selection.
+- Diagnostics: `state.diagnostics_mut()` → `reset(&rope)` + `push(Diagnostic::new(start..end, msg)
+  .with_severity(..))` with LSP `Position`s (`rope.offset_to_position`), then `cx.notify()`.
+- Hover: set `state.lsp_mut().hover_provider = Some(Rc::new(impl HoverProvider))`; return markdown `Hover`.
+- Range decorations (`create_range_decorations_collection`, `RangeDecorationStyle::Fill`) track edits on
+  their own; good for the "statement that will run" highlight.
+- The editor binds `secondary-enter` (inserts a newline and emits `PressEnter`). To make Ctrl+Enter run a
+  query instead, bind your action in a more specific context: `Some("QueryEditor > Input")`.
+- Typing `(` auto-inserts `)`: tests that need exact text should set it rather than type it.
+- Multi-tab bars render `Panel::tab_name()` instead of `title()` when it is `Some`; leave it `None` to show
+  rich titles (badges). `DockSkin::set_close_button_visible(true)` enables tab close buttons (panels opt out
+  with `closable() -> false`).
+- In headless tests `background_spawn` work runs on the test dispatcher's thread, so latency measurements
+  include "background" work; real builds are faster.

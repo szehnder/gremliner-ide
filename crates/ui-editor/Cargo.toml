@@ -9,6 +9,13 @@ license.workspace = true
 [dependencies]
 gremlin-syntax.workspace = true
 gpui-kit.workspace = true
+ui-theme.workspace = true
+lsp-types.workspace = true
+anyhow.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+gpui-kit = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

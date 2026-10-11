@@ -17,15 +17,15 @@ actions!(
         ZoomOut,
         ZoomReset,
         AddConnection,
+        NewQueryTab,
+        SplitRight,
+        SaveQuery,
         ResetGeneralSettings,
         Quit,
     ]
 );
 
-/// Editor commands that only apply when an editor tab is open. The editor change implements them; the
-/// shell declares them so their palette visibility (`when`) can be tested now.
+/// Editor commands, declared by `ui-editor` and re-exported for the palette and keymap.
 pub mod editor {
-    use gpui_kit::actions;
-
-    actions!(editor, [FormatQuery]);
+    pub use ui_editor::actions::{FormatQuery, RunQuery, ToggleLineComment};
 }

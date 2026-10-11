@@ -10,7 +10,7 @@ pub const MONO_FONT_FAMILY: &str = "JetBrains Mono";
 
 macro_rules! font {
     ($path:literal) => {
-        include_bytes!(concat!("../../../../assets/fonts/", $path)).as_slice()
+        include_bytes!(concat!("../../../assets/fonts/", $path)).as_slice()
     };
 }
 

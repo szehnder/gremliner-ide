@@ -28,6 +28,15 @@ const MIGRATIONS: &[&str] = &[
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
     );",
+    // 3: open editor tabs (content, cursor, bound connection), restored on startup.
+    "CREATE TABLE open_tabs (
+        id TEXT PRIMARY KEY NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        cursor INTEGER NOT NULL DEFAULT 0,
+        connection_id TEXT,
+        updated_at INTEGER NOT NULL
+    );",
 ];
 
 /// The schema version after every migration has run.

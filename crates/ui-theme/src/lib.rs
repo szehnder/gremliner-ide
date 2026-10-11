@@ -1,4 +1,4 @@
-//! Design tokens and theming (ADR-0023).
+//! Design tokens and theming (ADR-0023), shared by every UI crate (ADR-0035).
 //!
 //! Colours live in `assets/themes/gremliner.json` (gpui-kit theme format) and reach UI code through
 //! `cx.theme()`. Sizes reach UI code through [`Tokens`]. This module and its children are the only UI
@@ -9,12 +9,12 @@ pub mod fonts;
 #[cfg(test)]
 mod contrast;
 
-use gpui_kit::component::{Theme, ThemeMode, ThemeRegistry};
+use gpui_kit::component::{ActiveTheme as _, Theme, ThemeMode, ThemeRegistry};
 use gpui_kit::*;
 use serde::{Deserialize, Serialize};
 
 /// The light and dark themes shipped with the app.
-pub const THEME_SET_JSON: &str = include_str!("../../../../assets/themes/gremliner.json");
+pub const THEME_SET_JSON: &str = include_str!("../../../assets/themes/gremliner.json");
 pub const LIGHT_THEME: &str = "Gremliner Light";
 pub const DARK_THEME: &str = "Gremliner Dark";
 
@@ -200,6 +200,11 @@ impl Tokens {
     pub const SIDEBAR_MAX_WIDTH: Pixels = px(520.0);
     pub const RIGHT_PANEL_WIDTH: Pixels = px(320.0);
     pub const RESULTS_HEIGHT: Pixels = px(300.0);
+
+    /// Background of the statement that Run will execute.
+    pub fn statement_highlight(cx: &App) -> Hsla {
+        cx.theme().primary.opacity(0.07)
+    }
 }
 
 #[cfg(test)]

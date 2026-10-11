@@ -11,7 +11,7 @@ Rust; the UI is GPUI via `gpui-kit`.
 - `crates/`: the Cargo workspace (layering in ADR-0004):
   - core: `gremlin-model`, `gremlin-syntax`, `graph-store`, `graph-layout`, `schema`, `debugger`
   - I/O: `gremlin-client`, `providers`, `llm`, `assistant`, `storage`
-  - UI: `graph-canvas`, `ui-editor`, `ui-results`, `ui-assistant`, `ui-workspace`, `gremliner` (binary)
+  - UI: `ui-theme` (tokens, ADR-0035), `graph-canvas`, `ui-editor`, `ui-results`, `ui-assistant`, `ui-workspace`, `gremliner` (binary)
   - headless: `gremliner-cli`
 - `xtask/`: `cargo xtask <ci|testenv|bench|screenshot|spec-coverage|layering>`.
 - `testenv/`: Docker gremlin-server plus seed data (ADR-0026).

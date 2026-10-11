@@ -35,3 +35,22 @@ multi-cursor and search. See proposal.md; ADR-0014 for the language layer.
 - Headless UI tests (`#[gpui_kit::test]`) for each scenario.
 - Benchmark `editor_typing_10k_lines` via the gpui-kit test harness timing.
 - `cargo xtask screenshot -- --open-connection local` shows the editor with a highlighted query.
+
+## As built
+
+- **Crates:** `ui-editor` holds `QueryEditor` (editor state, analysis mirror, problems list, hover, format,
+  comment toggle, run requests) and its actions; `ui-workspace` holds the dockable `EditorPanel` (tab
+  toolbar with connection picker, Run and Format buttons; title with colour, environment badge and dirty
+  marker), the `EditorTabs` registry, and persistence. Tokens moved to a shared `ui-theme` crate (ADR-0035).
+- **Analysis loop:** each edit is diffed into one incremental `Document::edit`; documents over 64 KB are
+  analysed on the background executor with a revision check (Run re-parses synchronously if stale).
+  Measured at 10k lines: p95 15 ms keystroke-to-frame in the headless harness (gpui-kit alone: 6.5 ms).
+- **Persistence:** `open_tabs` (id, title, content, cursor, connection) saved 500 ms after changes and on
+  close/quit; the dock layout stores only the tab id. An unreadable layout still reopens every stored tab.
+- **Run:** `EditorTabs` emits `EditorTabsEvent::RunRequested(RunRequest { tab_id, connection_id, text,
+  range })`; `query-execution` subscribes. Until then Run only records the request.
+- **Dirty marker:** set when the text differs from the last Save (Ctrl+S); saved queries arrive with
+  `query-history-saved`.
+- **Keys:** Ctrl/Cmd+Enter and Alt+Enter run, Shift+Alt+F formats, Ctrl/Cmd+/ toggles comments (all in
+  `QueryEditor > Input`), Ctrl/Cmd+T new tab, Ctrl/Cmd+\ split right.
+- The welcome view hides while any editor tab is open.

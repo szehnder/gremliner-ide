@@ -4,6 +4,7 @@
 //! restorable from a saved layout by its [`WorkspacePanel::NAME`]; never rename a shipped name.
 
 mod connections;
+mod editor_tab;
 mod empty;
 mod inspector;
 mod results;
@@ -14,6 +15,7 @@ use gpui_kit::component::dock::{DockPlacement, Panel, panel_handle, register_pan
 use gpui_kit::*;
 
 pub use connections::ConnectionsPanel;
+pub use editor_tab::{EditorPanel, EditorTabs, EditorTabsEvent, RunRequest};
 pub use empty::empty_state;
 pub use inspector::InspectorPanel;
 pub use results::ResultsPanel;
@@ -44,6 +46,7 @@ pub fn register_builtin(cx: &mut App) {
     register::<ResultsPanel>(cx);
     register::<InspectorPanel>(cx);
     register::<SettingsPanel>(cx);
+    editor_tab::register(cx);
 }
 
 /// Implements the boilerplate traits every simple panel needs.
