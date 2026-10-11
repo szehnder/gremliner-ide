@@ -44,3 +44,25 @@ ADR-0014 picks tree-sitter. TinkerPop's `gremlin-language/src/main/antlr4/Gremli
 - A corpus of 300+ real queries (TinkerPop docs recipes, Practical Gremlin examples) in `crates/gremlin-syntax/tests/corpus/valid/*.groovy` parses without errors.
 - criterion bench `incremental_reparse_200_lines`.
 - `cargo run -p gremliner-cli -- lint tests/corpus/invalid/unclosed.groovy` exits non-zero.
+
+## As built
+
+- **tree-sitter 0.26** (workspace bumped from 0.25) so the grammar shares gpui-kit's runtime; the generator is
+  pinned to `tree-sitter-cli@0.26.13` in `cargo xtask grammar [--test]` (npx; building needs no Node).
+- **Grammar** (`grammar/grammar.js`): traversal = `root ('.' segment)*`, segment = call or bare property
+  (`T.id`); calls take `(args)` and/or a closure; numeric suffixes cover Groovy (`L d f g`) and gremlin-lang
+  (`m n ...`). Grammar corpus: `grammar/test/corpus/*.txt`.
+- **Catalogue:** ~150 steps of TinkerPop 3.7 plus 3.8 notes (`none()` vs `discard()`), predicates, token
+  classes and static tokens. Unknown-step warnings apply only to Gremlin chains (rooted at `g`, `__`, or
+  anonymous), not to Groovy method calls on variables (`graph.features()`).
+- **Mutation:** writing step at any depth, an opaque closure, or a syntax error. `providers::read_only` now
+  uses this instead of the keyword scan.
+- **Prefix at step:** nested steps are placed in the parent's context: steps before the parent, then the
+  anonymous traversal (without `__.`) up to the step, e.g. `g.V().where(__.out().has(..))` at `has` →
+  `g.V().out().has(..)`. The debugger change decides which parents (e.g. `by()` modulators) are excluded.
+- **Formatter:** Gremlint style with trailing dots; statements containing comments, errors or multi-line
+  closures are left verbatim; blank-line structure between statements is preserved.
+- **Corpus:** 352 statements in `tests/corpus/valid`. `gremliner-cli`'s ignored test
+  `corpus_on_server` sends every read-only statement to the testenv to prove it is valid Gremlin-Groovy for
+  TinkerPop 3.7 (it found four 3.8/gremlin-lang-only forms, now fixed).
+- **Performance:** single-character edit + full diagnostics on a 200-line document: 0.41 ms (budget 8 ms).

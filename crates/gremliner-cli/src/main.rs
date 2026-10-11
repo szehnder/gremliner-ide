@@ -2,6 +2,7 @@
 //! without the GUI (ADR-0024). Subcommands are added by the OpenSpec change that implements them.
 
 mod connections;
+mod lang;
 mod query;
 mod render_bench;
 
@@ -25,6 +26,32 @@ struct Cli {
 enum Command {
     /// Print the version.
     Version,
+    /// Report syntax errors and unknown steps; exits 1 on errors.
+    Lint {
+        /// File to lint (`-` or omitted: stdin).
+        file: Option<std::path::PathBuf>,
+        /// Treat warnings as failures.
+        #[arg(long)]
+        deny_warnings: bool,
+    },
+    /// Format Gremlin (Gremlint style).
+    Fmt {
+        file: Option<std::path::PathBuf>,
+        #[arg(long, default_value_t = gremlin_syntax::format::DEFAULT_WIDTH)]
+        width: usize,
+        /// Rewrite the file in place.
+        #[arg(long)]
+        write: bool,
+        /// Exit 1 if the file is not already formatted.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Print the syntax tree, or with --json the statements, steps, mutation flags and parameters.
+    Parse {
+        file: Option<std::path::PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Manage saved connections (shared with the app).
     Connections {
         #[command(subcommand)]
@@ -81,6 +108,19 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Connections { cmd } => connections::run(cmd, cli.data_dir, &runtime)?,
+        Command::Lint {
+            file,
+            deny_warnings,
+        } => {
+            std::process::exit(lang::lint(file.as_ref(), deny_warnings)?);
+        }
+        Command::Fmt {
+            file,
+            width,
+            write,
+            check,
+        } => std::process::exit(lang::fmt(file.as_ref(), width, write, check)?),
+        Command::Parse { file, json } => std::process::exit(lang::parse(file.as_ref(), json)?),
         Command::Query {
             url,
             alias,

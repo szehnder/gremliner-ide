@@ -124,3 +124,59 @@ fn scenario_connections_cli_test() {
     assert!(removed.status.success());
     let _ = std::fs::remove_dir_all(&data);
 }
+
+#[test]
+fn scenario_gremlin_language_cli_lint_exit_code() {
+    let corpus = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../gremlin-syntax/tests/corpus"
+    );
+    let bad = Command::new(env!("CARGO_BIN_EXE_gremliner-cli"))
+        .args(["lint", &format!("{corpus}/invalid/unclosed.groovy")])
+        .output()
+        .unwrap();
+    assert_eq!(bad.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&bad.stdout);
+    assert!(
+        stdout.contains("unclosed.groovy:1:26: error: Missing closing parenthesis"),
+        "{stdout}"
+    );
+    let good = Command::new(env!("CARGO_BIN_EXE_gremliner-cli"))
+        .args(["lint", &format!("{corpus}/valid/modern.groovy")])
+        .output()
+        .unwrap();
+    assert!(
+        good.status.success(),
+        "{}",
+        String::from_utf8_lossy(&good.stdout)
+    );
+}
+
+#[test]
+fn fmt_and_parse_work_on_stdin() {
+    use std::io::Write as _;
+    let run = |args: &[&str], input: &str| {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_gremliner-cli"))
+            .args(args)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    };
+    let out = run(&["fmt"], "g . V( ).out( 'x' )");
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "g.V().out('x')\n");
+    let out = run(&["parse", "--json"], "g.V().has('code', code).drop()");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["statements"][0]["mutating"], true);
+    assert_eq!(
+        v["statements"][0]["parameters"],
+        serde_json::json!(["code"])
+    );
+}

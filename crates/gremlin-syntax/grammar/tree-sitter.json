@@ -1,0 +1,18 @@
+{
+  "grammars": [
+    {
+      "name": "gremlin",
+      "camelcase": "Gremlin",
+      "scope": "source.gremlin",
+      "path": ".",
+      "file-types": ["gremlin", "groovy"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "Apache-2.0",
+    "description": "Gremlin (Apache TinkerPop) grammar for tree-sitter"
+  },
+  "bindings": { "c": false, "go": false, "node": false, "python": false, "rust": false, "swift": false }
+}

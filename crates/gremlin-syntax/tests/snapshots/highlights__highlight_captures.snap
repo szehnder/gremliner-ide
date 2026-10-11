@@ -1,0 +1,24 @@
+---
+source: crates/gremlin-syntax/tests/highlights.rs
+expression: "lines.join(\"\\n\")"
+---
+comment              // top airports
+variable             g
+variable.builtin     g
+function.method      V
+function.method      hasLabel
+string               'airport'
+function.method      has
+string               'runways'
+variable             P
+type                 P
+function.method      gt
+number               3
+function.method      order
+function.method      by
+string               'elev'
+constant.builtin     desc
+function.method      limit
+number               5L
+function.method      valueMap
+boolean              true

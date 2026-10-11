@@ -29,6 +29,8 @@ graph-layout.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+gremlin-client = { workspace = true, features = ["testenv"] }
 
 [lints]
 workspace = true

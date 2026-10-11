@@ -1,0 +1,953 @@
+# Gremlin step catalogue (TinkerPop 3.7). Drives hover docs, unknown-step warnings, mutation detection and
+# autocomplete. `kind`: source | filter | map | flatMap | sideEffect | branch | barrier | modulator |
+# terminal | mutation. `anchor` overrides the reference-doc anchor (default `<lowercase name>-step`).
+
+[[step]]
+name = "V"
+kind = "source"
+signatures = ["V(Object... ids)"]
+doc = "Starts (or, mid-traversal, continues) at vertices, optionally only those with the given ids."
+anchor = "graph-step"
+
+[[step]]
+name = "E"
+kind = "source"
+signatures = ["E(Object... ids)"]
+doc = "Starts at edges, optionally only those with the given ids."
+anchor = "graph-step"
+
+[[step]]
+name = "addV"
+kind = "mutation"
+mutating = true
+signatures = ["addV()", "addV(String label)", "addV(Traversal labelTraversal)"]
+doc = "Adds a vertex with the given label (default `vertex`)."
+anchor = "addvertex-step"
+
+[[step]]
+name = "addE"
+kind = "mutation"
+mutating = true
+signatures = ["addE(String label)", "addE(Traversal labelTraversal)"]
+doc = "Adds an edge; set its ends with from() and to()."
+anchor = "addedge-step"
+
+[[step]]
+name = "property"
+kind = "mutation"
+mutating = true
+signatures = ["property(Object key, Object value, Object... keyValues)", "property(Cardinality cardinality, Object key, Object value, Object... keyValues)", "property(Map properties)"]
+doc = "Sets a property on the current element (or a meta-property on a vertex property)."
+anchor = "addproperty-step"
+
+[[step]]
+name = "drop"
+kind = "mutation"
+mutating = true
+signatures = ["drop()"]
+doc = "Removes the current elements or properties from the graph."
+
+[[step]]
+name = "mergeV"
+kind = "mutation"
+mutating = true
+signatures = ["mergeV()", "mergeV(Map searchCreate)", "mergeV(Traversal searchCreate)"]
+doc = "Finds a vertex matching the map or creates it; customise with option(Merge.onCreate/onMatch, ...)."
+
+[[step]]
+name = "mergeE"
+kind = "mutation"
+mutating = true
+signatures = ["mergeE()", "mergeE(Map searchCreate)", "mergeE(Traversal searchCreate)"]
+doc = "Finds an edge matching the map (including Direction.OUT/IN ends) or creates it."
+
+[[step]]
+name = "io"
+kind = "mutation"
+mutating = true
+signatures = ["io(String file)"]
+doc = "Reads a graph from, or writes it to, a file; follow with read() or write()."
+
+[[step]]
+name = "read"
+kind = "mutation"
+mutating = true
+signatures = ["read()"]
+doc = "Completes io(): loads the file into the graph."
+
+[[step]]
+name = "write"
+kind = "terminal"
+signatures = ["write()"]
+doc = "Completes io(): writes the graph to the file."
+
+[[step]]
+name = "inject"
+kind = "source"
+signatures = ["inject(Object... values)"]
+doc = "Inserts arbitrary values into the traversal stream."
+
+[[step]]
+name = "call"
+kind = "source"
+signatures = ["call()", "call(String service)", "call(String service, Map params)", "call(String service, Traversal params)"]
+doc = "Calls a provider-defined service; call() with no arguments lists available services."
+
+[[step]]
+name = "aggregate"
+kind = "sideEffect"
+signatures = ["aggregate(String sideEffectKey)", "aggregate(Scope scope, String sideEffectKey)"]
+doc = "Collects all objects seen so far into a side-effect collection (a barrier in global scope)."
+
+[[step]]
+name = "all"
+kind = "filter"
+signatures = ["all(P predicate)"]
+doc = "Keeps lists whose every element matches the predicate."
+
+[[step]]
+name = "and"
+kind = "filter"
+signatures = ["and(Traversal... traversals)"]
+doc = "Keeps traversers for which every given traversal produces a result."
+
+[[step]]
+name = "any"
+kind = "filter"
+signatures = ["any(P predicate)"]
+doc = "Keeps lists in which at least one element matches the predicate."
+
+[[step]]
+name = "as"
+kind = "modulator"
+signatures = ["as(String stepLabel, String... stepLabels)"]
+doc = "Labels the step so later steps (select, where, match, path) can refer back to it."
+
+[[step]]
+name = "asDate"
+kind = "map"
+signatures = ["asDate()"]
+doc = "Converts a string or number to a date."
+
+[[step]]
+name = "asString"
+kind = "map"
+signatures = ["asString()", "asString(Scope scope)"]
+doc = "Converts the incoming value to its string representation."
+
+[[step]]
+name = "barrier"
+kind = "barrier"
+signatures = ["barrier()", "barrier(int maxBarrierSize)"]
+doc = "Collects all traversers before letting any continue, which enables bulking."
+
+[[step]]
+name = "both"
+kind = "flatMap"
+signatures = ["both(String... edgeLabels)"]
+doc = "Moves to adjacent vertices in both directions, optionally only over the given edge labels."
+anchor = "vertex-steps"
+
+[[step]]
+name = "bothE"
+kind = "flatMap"
+signatures = ["bothE(String... edgeLabels)"]
+doc = "Moves to incident edges in both directions."
+anchor = "vertex-steps"
+
+[[step]]
+name = "bothV"
+kind = "flatMap"
+signatures = ["bothV()"]
+doc = "Moves from an edge to both of its vertices."
+anchor = "vertex-steps"
+
+[[step]]
+name = "branch"
+kind = "branch"
+signatures = ["branch(Traversal branchTraversal)"]
+doc = "Routes each traverser to the option() whose key matches the branch traversal's result."
+
+[[step]]
+name = "by"
+kind = "modulator"
+signatures = ["by()", "by(String key)", "by(T token)", "by(Traversal traversal)", "by(Order order)", "by(Traversal traversal, Order order)", "by(Column column)"]
+doc = "Modulates the previous step: which value to group/order/select/project by."
+
+[[step]]
+name = "cap"
+kind = "barrier"
+signatures = ["cap(String sideEffectKey, String... sideEffectKeys)"]
+doc = "Emits the named side-effect(s) after all traversers have been processed."
+
+[[step]]
+name = "choose"
+kind = "branch"
+signatures = ["choose(Traversal choice)", "choose(Traversal predicate, Traversal trueChoice, Traversal falseChoice)", "choose(P predicate, Traversal trueChoice, Traversal falseChoice)"]
+doc = "If/then/else or switch-style branching; with one argument, follow with option()."
+
+[[step]]
+name = "coalesce"
+kind = "branch"
+signatures = ["coalesce(Traversal... traversals)"]
+doc = "Returns the results of the first traversal that produces anything."
+
+[[step]]
+name = "coin"
+kind = "filter"
+signatures = ["coin(double probability)"]
+doc = "Randomly keeps each traverser with the given probability."
+
+[[step]]
+name = "combine"
+kind = "map"
+signatures = ["combine(Object values)"]
+doc = "Concatenates the incoming list with the given list or traversal result."
+
+[[step]]
+name = "concat"
+kind = "map"
+signatures = ["concat(String... strings)", "concat(Traversal... traversals)"]
+doc = "Concatenates strings to the incoming string."
+
+[[step]]
+name = "conjoin"
+kind = "map"
+signatures = ["conjoin(String delimiter)"]
+doc = "Joins the elements of the incoming list into a string with the delimiter."
+
+[[step]]
+name = "connectedComponent"
+kind = "map"
+signatures = ["connectedComponent()"]
+doc = "Computes connected components (OLAP); with(ConnectedComponent.edges/propertyName, ...) configures it."
+
+[[step]]
+name = "constant"
+kind = "map"
+signatures = ["constant(Object value)"]
+doc = "Replaces each traverser's object with a constant."
+
+[[step]]
+name = "count"
+kind = "barrier"
+signatures = ["count()", "count(Scope scope)"]
+doc = "Counts the traversers (or, in local scope, the items in each collection)."
+
+[[step]]
+name = "cyclicPath"
+kind = "filter"
+signatures = ["cyclicPath()"]
+doc = "Keeps traversers whose path has repeated an object."
+
+[[step]]
+name = "dateAdd"
+kind = "map"
+signatures = ["dateAdd(DT unit, int value)"]
+doc = "Adds a duration (DT.second/minute/hour/day) to the incoming date."
+
+[[step]]
+name = "dateDiff"
+kind = "map"
+signatures = ["dateDiff(Date value)", "dateDiff(Traversal dateTraversal)"]
+doc = "Returns the difference between the incoming date and the given date, in seconds."
+
+[[step]]
+name = "dedup"
+kind = "filter"
+signatures = ["dedup(String... labels)", "dedup(Scope scope, String... labels)"]
+doc = "Removes repeated objects; by() chooses what counts as the same."
+
+[[step]]
+name = "difference"
+kind = "map"
+signatures = ["difference(Object values)"]
+doc = "Returns items of the incoming list that are not in the given list."
+
+[[step]]
+name = "discard"
+kind = "filter"
+signatures = ["discard()"]
+doc = "Filters out every traverser. TinkerPop 3.8+; use none() on 3.7."
+
+[[step]]
+name = "disjunct"
+kind = "map"
+signatures = ["disjunct(Object values)"]
+doc = "Returns items that are in exactly one of the incoming list and the given list."
+
+[[step]]
+name = "element"
+kind = "map"
+signatures = ["element()"]
+doc = "Moves from a property to the element that owns it."
+
+[[step]]
+name = "elementMap"
+kind = "map"
+signatures = ["elementMap(String... propertyKeys)"]
+doc = "Returns a map of the element's id, label, (edge ends) and single-valued properties."
+
+[[step]]
+name = "emit"
+kind = "modulator"
+signatures = ["emit()", "emit(Traversal emitTraversal)", "emit(P predicate)"]
+doc = "Modulates repeat(): which traversers are emitted from the loop as it runs."
+
+[[step]]
+name = "fail"
+kind = "sideEffect"
+signatures = ["fail()", "fail(String message)"]
+doc = "Stops the traversal with an error when a traverser reaches it."
+
+[[step]]
+name = "filter"
+kind = "filter"
+signatures = ["filter(Traversal filterTraversal)", "filter(Predicate predicate)"]
+doc = "Keeps traversers for which the traversal produces a result."
+
+[[step]]
+name = "flatMap"
+kind = "flatMap"
+signatures = ["flatMap(Traversal flatMapTraversal)"]
+doc = "Replaces each traverser with every result of the traversal."
+
+[[step]]
+name = "fold"
+kind = "barrier"
+signatures = ["fold()", "fold(Object seed, BiFunction foldFunction)"]
+doc = "Collects all traversers into a single list (or reduces them with a seed and operator)."
+
+[[step]]
+name = "format"
+kind = "map"
+signatures = ["format(String format)"]
+doc = "Builds a string from a template such as `%{name} is %{age}`."
+
+[[step]]
+name = "from"
+kind = "modulator"
+signatures = ["from(String fromStepLabel)", "from(Traversal fromVertex)", "from(Vertex fromVertex)"]
+doc = "Sets the start of addE() or the start of a path range."
+
+[[step]]
+name = "group"
+kind = "barrier"
+signatures = ["group()", "group(String sideEffectKey)"]
+doc = "Groups traversers into a map; the first by() picks keys, the second the values."
+
+[[step]]
+name = "groupCount"
+kind = "barrier"
+signatures = ["groupCount()", "groupCount(String sideEffectKey)"]
+doc = "Counts how often each object (or by() key) occurs."
+
+[[step]]
+name = "has"
+kind = "filter"
+signatures = ["has(String propertyKey)", "has(String propertyKey, Object value)", "has(String propertyKey, P predicate)", "has(String label, String propertyKey, Object value)", "has(T accessor, Object value)", "has(String propertyKey, Traversal propertyTraversal)"]
+doc = "Keeps elements that have the property, optionally with a matching value or predicate."
+
+[[step]]
+name = "hasId"
+kind = "filter"
+signatures = ["hasId(Object id, Object... otherIds)", "hasId(P predicate)"]
+doc = "Keeps elements with one of the given ids."
+
+[[step]]
+name = "hasKey"
+kind = "filter"
+signatures = ["hasKey(String key, String... otherKeys)", "hasKey(P predicate)"]
+doc = "Keeps properties with one of the given keys."
+
+[[step]]
+name = "hasLabel"
+kind = "filter"
+signatures = ["hasLabel(String label, String... otherLabels)", "hasLabel(P predicate)"]
+doc = "Keeps elements with one of the given labels."
+
+[[step]]
+name = "hasNot"
+kind = "filter"
+signatures = ["hasNot(String propertyKey)"]
+doc = "Keeps elements that do not have the property."
+
+[[step]]
+name = "hasValue"
+kind = "filter"
+signatures = ["hasValue(Object value, Object... otherValues)", "hasValue(P predicate)"]
+doc = "Keeps properties with one of the given values."
+
+[[step]]
+name = "id"
+kind = "map"
+signatures = ["id()"]
+doc = "Returns the element's identifier."
+
+[[step]]
+name = "identity"
+kind = "map"
+signatures = ["identity()"]
+doc = "Passes traversers through unchanged."
+
+[[step]]
+name = "in"
+kind = "flatMap"
+signatures = ["in(String... edgeLabels)"]
+doc = "Moves to adjacent vertices over incoming edges."
+anchor = "vertex-steps"
+
+[[step]]
+name = "inE"
+kind = "flatMap"
+signatures = ["inE(String... edgeLabels)"]
+doc = "Moves to incoming edges."
+anchor = "vertex-steps"
+
+[[step]]
+name = "inV"
+kind = "flatMap"
+signatures = ["inV()"]
+doc = "Moves from an edge to its incoming (head) vertex."
+anchor = "vertex-steps"
+
+[[step]]
+name = "index"
+kind = "map"
+signatures = ["index()"]
+doc = "Pairs each item of a collection with its position; with(WithOptions.indexer, ...) picks the shape."
+
+[[step]]
+name = "intersect"
+kind = "map"
+signatures = ["intersect(Object values)"]
+doc = "Returns items present in both the incoming list and the given list."
+
+[[step]]
+name = "is"
+kind = "filter"
+signatures = ["is(Object value)", "is(P predicate)"]
+doc = "Keeps values equal to the argument or matching the predicate."
+
+[[step]]
+name = "key"
+kind = "map"
+signatures = ["key()"]
+doc = "Returns a property's key."
+
+[[step]]
+name = "label"
+kind = "map"
+signatures = ["label()"]
+doc = "Returns the element's label."
+
+[[step]]
+name = "length"
+kind = "map"
+signatures = ["length()", "length(Scope scope)"]
+doc = "Returns the length of the incoming string."
+
+[[step]]
+name = "limit"
+kind = "filter"
+signatures = ["limit(long limit)", "limit(Scope scope, long limit)"]
+doc = "Keeps the first n traversers (or the first n items of each collection in local scope)."
+
+[[step]]
+name = "local"
+kind = "branch"
+signatures = ["local(Traversal localTraversal)"]
+doc = "Runs the traversal separately for each traverser, so barriers apply per object."
+
+[[step]]
+name = "loops"
+kind = "map"
+signatures = ["loops()", "loops(String loopName)"]
+doc = "Returns how many times the traverser has gone through the current repeat() loop."
+
+[[step]]
+name = "lTrim"
+kind = "map"
+signatures = ["lTrim()", "lTrim(Scope scope)"]
+doc = "Removes leading whitespace from the incoming string."
+
+[[step]]
+name = "map"
+kind = "map"
+signatures = ["map(Traversal mapTraversal)", "map(Function function)"]
+doc = "Replaces each traverser's object with the first result of the traversal."
+
+[[step]]
+name = "match"
+kind = "map"
+signatures = ["match(Traversal... matchTraversals)"]
+doc = "Declarative pattern matching over labelled sub-traversals."
+
+[[step]]
+name = "math"
+kind = "map"
+signatures = ["math(String expression)"]
+doc = "Evaluates an arithmetic expression; `_` is the current value and labels refer to earlier steps."
+
+[[step]]
+name = "max"
+kind = "barrier"
+signatures = ["max()", "max(Scope scope)"]
+doc = "Returns the largest value."
+
+[[step]]
+name = "mean"
+kind = "barrier"
+signatures = ["mean()", "mean(Scope scope)"]
+doc = "Returns the average of the numbers."
+
+[[step]]
+name = "merge"
+kind = "map"
+signatures = ["merge(Object values)"]
+doc = "Merges the incoming list or map with the given one (union, without duplicates for lists)."
+
+[[step]]
+name = "min"
+kind = "barrier"
+signatures = ["min()", "min(Scope scope)"]
+doc = "Returns the smallest value."
+
+[[step]]
+name = "none"
+kind = "filter"
+signatures = ["none()", "none(P predicate)"]
+doc = "On TinkerPop 3.7, filters out every traverser. From 3.8, none(P) keeps lists in which no element matches."
+
+[[step]]
+name = "not"
+kind = "filter"
+signatures = ["not(Traversal notTraversal)"]
+doc = "Keeps traversers for which the traversal produces nothing."
+
+[[step]]
+name = "option"
+kind = "modulator"
+signatures = ["option(Object pickToken, Traversal traversalOption)", "option(Traversal traversalOption)", "option(Merge token, Map values)"]
+doc = "Adds a branch to branch()/choose(), or an onCreate/onMatch action to mergeV()/mergeE()."
+
+[[step]]
+name = "optional"
+kind = "branch"
+signatures = ["optional(Traversal optionalTraversal)"]
+doc = "Returns the traversal's results, or the incoming object if it produces none."
+
+[[step]]
+name = "or"
+kind = "filter"
+signatures = ["or(Traversal... traversals)"]
+doc = "Keeps traversers for which at least one of the traversals produces a result."
+
+[[step]]
+name = "order"
+kind = "barrier"
+signatures = ["order()", "order(Scope scope)"]
+doc = "Sorts traversers; by() picks the sort key and direction."
+
+[[step]]
+name = "otherV"
+kind = "flatMap"
+signatures = ["otherV()"]
+doc = "Moves from an edge to the vertex the traverser did not come from."
+anchor = "vertex-steps"
+
+[[step]]
+name = "out"
+kind = "flatMap"
+signatures = ["out(String... edgeLabels)"]
+doc = "Moves to adjacent vertices over outgoing edges, optionally only the given edge labels."
+anchor = "vertex-steps"
+
+[[step]]
+name = "outE"
+kind = "flatMap"
+signatures = ["outE(String... edgeLabels)"]
+doc = "Moves to outgoing edges."
+anchor = "vertex-steps"
+
+[[step]]
+name = "outV"
+kind = "flatMap"
+signatures = ["outV()"]
+doc = "Moves from an edge to its outgoing (tail) vertex."
+anchor = "vertex-steps"
+
+[[step]]
+name = "pageRank"
+kind = "map"
+signatures = ["pageRank()", "pageRank(double alpha)"]
+doc = "Computes PageRank (OLAP)."
+
+[[step]]
+name = "path"
+kind = "map"
+signatures = ["path()"]
+doc = "Returns the history of objects the traverser visited; by() formats each one."
+
+[[step]]
+name = "peerPressure"
+kind = "map"
+signatures = ["peerPressure()"]
+doc = "Clusters vertices with the peer pressure algorithm (OLAP)."
+
+[[step]]
+name = "product"
+kind = "map"
+signatures = ["product(Object values)"]
+doc = "Returns the cartesian product of the incoming list and the given list."
+
+[[step]]
+name = "profile"
+kind = "terminal"
+signatures = ["profile()", "profile(String sideEffectKey)"]
+doc = "Runs the traversal and returns timing and count metrics for each step."
+
+[[step]]
+name = "project"
+kind = "map"
+signatures = ["project(String projectKey, String... otherProjectKeys)"]
+doc = "Builds a map with the given keys; each following by() computes one value."
+
+[[step]]
+name = "properties"
+kind = "flatMap"
+signatures = ["properties(String... propertyKeys)"]
+doc = "Moves to the element's properties (all, or only the given keys)."
+
+[[step]]
+name = "propertyMap"
+kind = "map"
+signatures = ["propertyMap(String... propertyKeys)"]
+doc = "Returns a map from property key to the list of property objects."
+
+[[step]]
+name = "range"
+kind = "filter"
+signatures = ["range(long low, long high)", "range(Scope scope, long low, long high)"]
+doc = "Keeps traversers from position low (inclusive) to high (exclusive)."
+
+[[step]]
+name = "repeat"
+kind = "branch"
+signatures = ["repeat(Traversal repeatTraversal)", "repeat(String loopName, Traversal repeatTraversal)"]
+doc = "Loops over the traversal; until() or times() decides when to stop and emit() what leaves the loop."
+
+[[step]]
+name = "replace"
+kind = "map"
+signatures = ["replace(String oldChar, String newChar)", "replace(Scope scope, String oldChar, String newChar)"]
+doc = "Replaces occurrences of a substring in the incoming string."
+
+[[step]]
+name = "reverse"
+kind = "map"
+signatures = ["reverse()"]
+doc = "Reverses the incoming string or list."
+
+[[step]]
+name = "rTrim"
+kind = "map"
+signatures = ["rTrim()", "rTrim(Scope scope)"]
+doc = "Removes trailing whitespace from the incoming string."
+
+[[step]]
+name = "sack"
+kind = "sideEffect"
+signatures = ["sack()", "sack(BiFunction sackOperator)"]
+doc = "Reads the traverser's sack, or updates it with an operator and by() value; start one with withSack()."
+
+[[step]]
+name = "sample"
+kind = "filter"
+signatures = ["sample(int amountToSample)", "sample(Scope scope, int amountToSample)"]
+doc = "Keeps a random sample of n traversers (by() weights the choice)."
+
+[[step]]
+name = "select"
+kind = "map"
+signatures = ["select(String selectKey)", "select(String selectKey1, String selectKey2, String... otherSelectKeys)", "select(Pop pop, String selectKey)", "select(Column column)", "select(Traversal keyTraversal)"]
+doc = "Selects labelled steps, map keys or side-effects; by() formats each selected value."
+
+[[step]]
+name = "shortestPath"
+kind = "map"
+signatures = ["shortestPath()"]
+doc = "Finds shortest paths (OLAP); configure with with(ShortestPath.target/edges/distance, ...)."
+
+[[step]]
+name = "sideEffect"
+kind = "sideEffect"
+signatures = ["sideEffect(Traversal sideEffectTraversal)", "sideEffect(Consumer consumer)"]
+doc = "Runs the traversal for its side effects and passes the original traverser on."
+
+[[step]]
+name = "simplePath"
+kind = "filter"
+signatures = ["simplePath()"]
+doc = "Keeps traversers whose path visits no object twice."
+
+[[step]]
+name = "skip"
+kind = "filter"
+signatures = ["skip(long skip)", "skip(Scope scope, long skip)"]
+doc = "Drops the first n traversers."
+
+[[step]]
+name = "split"
+kind = "map"
+signatures = ["split(String separator)", "split(Scope scope, String separator)"]
+doc = "Splits the incoming string into a list."
+
+[[step]]
+name = "subgraph"
+kind = "sideEffect"
+signatures = ["subgraph(String sideEffectKey)"]
+doc = "Builds an edge-induced subgraph from the edges that pass through it."
+
+[[step]]
+name = "substring"
+kind = "map"
+signatures = ["substring(int startIndex)", "substring(int startIndex, int endIndex)", "substring(Scope scope, int startIndex, int endIndex)"]
+doc = "Returns part of the incoming string."
+
+[[step]]
+name = "sum"
+kind = "barrier"
+signatures = ["sum()", "sum(Scope scope)"]
+doc = "Returns the sum of the numbers."
+
+[[step]]
+name = "tail"
+kind = "filter"
+signatures = ["tail()", "tail(long limit)", "tail(Scope scope, long limit)"]
+doc = "Keeps the last n traversers."
+
+[[step]]
+name = "timeLimit"
+kind = "filter"
+signatures = ["timeLimit(long timeLimit)"]
+doc = "Stops passing traversers after the given number of milliseconds."
+
+[[step]]
+name = "times"
+kind = "modulator"
+signatures = ["times(int maxLoops)"]
+doc = "Modulates repeat(): loop exactly n times."
+
+[[step]]
+name = "to"
+kind = "modulator"
+signatures = ["to(String toStepLabel)", "to(Traversal toVertex)", "to(Vertex toVertex)", "to(Direction direction, String... edgeLabels)"]
+doc = "Sets the end of addE() or of a path range."
+
+[[step]]
+name = "toLower"
+kind = "map"
+signatures = ["toLower()", "toLower(Scope scope)"]
+doc = "Lower-cases the incoming string."
+
+[[step]]
+name = "toUpper"
+kind = "map"
+signatures = ["toUpper()", "toUpper(Scope scope)"]
+doc = "Upper-cases the incoming string."
+
+[[step]]
+name = "tree"
+kind = "barrier"
+signatures = ["tree()", "tree(String sideEffectKey)"]
+doc = "Aggregates traverser paths into a tree."
+
+[[step]]
+name = "trim"
+kind = "map"
+signatures = ["trim()", "trim(Scope scope)"]
+doc = "Removes leading and trailing whitespace from the incoming string."
+
+[[step]]
+name = "unfold"
+kind = "flatMap"
+signatures = ["unfold()"]
+doc = "Unrolls a collection (list, map entries, iterator) into separate traversers."
+
+[[step]]
+name = "union"
+kind = "branch"
+signatures = ["union(Traversal... unionTraversals)"]
+doc = "Merges the results of several traversals."
+
+[[step]]
+name = "until"
+kind = "modulator"
+signatures = ["until(Traversal untilTraversal)", "until(P predicate)"]
+doc = "Modulates repeat(): stop looping when the traversal produces a result."
+
+[[step]]
+name = "value"
+kind = "map"
+signatures = ["value()"]
+doc = "Returns a property's value."
+
+[[step]]
+name = "valueMap"
+kind = "map"
+signatures = ["valueMap(String... propertyKeys)", "valueMap(boolean includeTokens, String... propertyKeys)"]
+doc = "Returns a map from property key to the list of values; with(WithOptions.tokens) adds id and label."
+
+[[step]]
+name = "values"
+kind = "flatMap"
+signatures = ["values(String... propertyKeys)"]
+doc = "Returns the values of the given properties (or all properties)."
+
+[[step]]
+name = "where"
+kind = "filter"
+signatures = ["where(P predicate)", "where(String startKey, P predicate)", "where(Traversal whereTraversal)"]
+doc = "Filters by a traversal or by comparing labelled steps with a predicate."
+
+[[step]]
+name = "with"
+kind = "modulator"
+signatures = ["with(String key)", "with(String key, Object value)"]
+doc = "Passes configuration to the previous step (e.g. WithOptions.tokens for valueMap)."
+
+[[step]]
+name = "next"
+kind = "terminal"
+signatures = ["next()", "next(int amount)"]
+doc = "Returns the next result (or the next n)."
+
+[[step]]
+name = "toList"
+kind = "terminal"
+signatures = ["toList()"]
+doc = "Returns all results as a list."
+
+[[step]]
+name = "toSet"
+kind = "terminal"
+signatures = ["toSet()"]
+doc = "Returns all results as a set."
+
+[[step]]
+name = "toBulkSet"
+kind = "terminal"
+signatures = ["toBulkSet()"]
+doc = "Returns all results as a bulk set (values with counts)."
+
+[[step]]
+name = "iterate"
+kind = "terminal"
+signatures = ["iterate()"]
+doc = "Runs the traversal for its side effects and returns nothing."
+
+[[step]]
+name = "hasNext"
+kind = "terminal"
+signatures = ["hasNext()"]
+doc = "Returns whether the traversal has another result."
+
+[[step]]
+name = "tryNext"
+kind = "terminal"
+signatures = ["tryNext()"]
+doc = "Returns the next result as an Optional."
+
+[[step]]
+name = "explain"
+kind = "terminal"
+signatures = ["explain()"]
+doc = "Returns how traversal strategies rewrite the traversal, without running it."
+
+[[step]]
+name = "toStream"
+kind = "terminal"
+signatures = ["toStream()"]
+doc = "Returns the results as a Java Stream."
+
+# Traversal source configuration (on g).
+
+[[step]]
+name = "withSack"
+kind = "source"
+signatures = ["withSack(Object initialValue)", "withSack(Object initialValue, BinaryOperator mergeOperator)"]
+doc = "Gives every traverser a sack with an initial value."
+anchor = "sack-step"
+
+[[step]]
+name = "withSideEffect"
+kind = "source"
+signatures = ["withSideEffect(String key, Object initialValue)"]
+doc = "Pre-populates a side-effect available to every traverser."
+anchor = "start-steps"
+
+[[step]]
+name = "withStrategies"
+kind = "source"
+signatures = ["withStrategies(TraversalStrategy... strategies)"]
+doc = "Adds traversal strategies (e.g. SubgraphStrategy, ReadOnlyStrategy)."
+anchor = "traversalstrategy"
+
+[[step]]
+name = "withoutStrategies"
+kind = "source"
+signatures = ["withoutStrategies(Class... strategies)"]
+doc = "Removes traversal strategies."
+anchor = "traversalstrategy"
+
+[[step]]
+name = "withComputer"
+kind = "source"
+signatures = ["withComputer()", "withComputer(Class graphComputer)"]
+doc = "Runs the traversal on a graph computer (OLAP)."
+anchor = "traversalvertexprogram"
+
+[[step]]
+name = "withBulk"
+kind = "source"
+signatures = ["withBulk(boolean useBulk)"]
+doc = "Turns traverser bulking on or off."
+anchor = "start-steps"
+
+[[step]]
+name = "withPath"
+kind = "source"
+signatures = ["withPath()"]
+doc = "Tracks paths for every traverser."
+anchor = "start-steps"
+
+[[step]]
+name = "tx"
+kind = "mutation"
+mutating = true
+signatures = ["tx()"]
+doc = "Returns the transaction for the traversal source (commit/rollback)."
+anchor = "transactions"
+
+# Predicates (P.*, TextP.*, or statically imported) and tokens are listed separately: they are valid call and
+# identifier names that are not steps.
+[tokens]
+predicates = [
+  "eq", "neq", "lt", "lte", "gt", "gte", "inside", "outside", "between", "within", "without", "not",
+  "containing", "notContaining", "startingWith", "notStartingWith", "endingWith", "notEndingWith",
+  "regex", "notRegex", "test", "and", "or", "negate",
+]
+classes = [
+  "P", "TextP", "T", "Order", "Scope", "Column", "Pop", "Cardinality", "Direction", "Operator", "Merge",
+  "Pick", "Barrier", "WithOptions", "DT", "ConnectedComponent", "PageRank", "PeerPressure", "ShortestPath",
+  "SubgraphStrategy", "ReadOnlyStrategy", "PartitionStrategy", "Translator", "Lambda", "N",
+]
+statics = [
+  "id", "label", "key", "value", "local", "global", "keys", "values", "asc", "desc", "shuffle", "incr", "decr",
+  "single", "list", "set", "first", "last", "mixed", "all", "OUT", "IN", "BOTH", "from", "to",
+  "outV", "inV", "onCreate", "onMatch", "any", "none", "normSack", "sum", "minus", "mult", "div", "min", "max",
+  "assign", "addAll", "sumLong", "second", "minute", "hour", "day", "tokens", "ids", "labels", "indexer", "map",
+  "build", "create", "instance", "edges", "propertyName", "times", "distance", "target", "maxDistance",
+  "includeEdges", "modulateBy", "it", "_", "graph", "g", "__", "datetime", "mult", "Set", "System", "commit", "rollback", "open", "close", "isOpen",
+]

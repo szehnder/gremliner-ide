@@ -1,0 +1,82 @@
+==================
+Spawn and steps
+==================
+
+g.V().out('knows')
+
+---
+
+(source_file
+  (traversal
+    root: (identifier)
+    (call name: (identifier) arguments: (arguments))
+    (call name: (identifier) arguments: (arguments (string)))))
+
+==================
+Anonymous traversal and predicate
+==================
+
+g.V().where(out('created').has('age', P.gt(30)))
+
+---
+
+(source_file
+  (traversal
+    root: (identifier)
+    (call name: (identifier) arguments: (arguments))
+    (call
+      name: (identifier)
+      arguments: (arguments
+        (traversal
+          root: (call name: (identifier) arguments: (arguments (string)))
+          (call
+            name: (identifier)
+            arguments: (arguments
+              (string)
+              (traversal
+                root: (identifier)
+                (call name: (identifier) arguments: (arguments (number)))))))))))
+
+==================
+Literals, maps and enums
+==================
+
+g.inject([name: 'x', (T.label): 'y'], [1, 2.5d], [:]).order().by(Order.desc)
+
+---
+
+(source_file
+  (traversal
+    root: (identifier)
+    (call
+      name: (identifier)
+      arguments: (arguments
+        (map
+          (pair key: (identifier) value: (string))
+          (pair key: (parenthesized (traversal root: (identifier) (property))) value: (string)))
+        (list (number) (number))
+        (map)))
+    (call name: (identifier) arguments: (arguments))
+    (call name: (identifier) arguments: (arguments (traversal root: (identifier) (property))))))
+
+==================
+Statements, assignment, comments and closures
+==================
+
+// first
+x = g.V(1L).next(); g.V().filter{ it.get().value('age') > 30 }
+
+---
+
+(source_file
+  (line_comment)
+  (assignment
+    name: (identifier)
+    value: (traversal
+      root: (identifier)
+      (call name: (identifier) arguments: (arguments (number)))
+      (call name: (identifier) arguments: (arguments))))
+  (traversal
+    root: (identifier)
+    (call name: (identifier) arguments: (arguments))
+    (call name: (identifier) closure: (lambda (string)))))

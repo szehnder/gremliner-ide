@@ -1,0 +1,14 @@
+---
+source: crates/gremlin-syntax/src/format.rs
+assertion_line: 234
+expression: out
+---
+g.V().
+  hasLabel('airport').
+  has('country', 'US').
+  out('route').
+  has('region', 'US-TX').
+  values('code').
+  dedup().
+  order().
+  limit(10)

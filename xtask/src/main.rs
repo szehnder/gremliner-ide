@@ -1,5 +1,6 @@
 //! Project automation: `cargo xtask <command>`. See AGENTS.md.
 
+mod grammar;
 mod layering;
 mod screenshot;
 mod spec_coverage;
@@ -51,6 +52,12 @@ enum Cmd {
         #[arg(long)]
         check: bool,
     },
+    /// Regenerate the Gremlin tree-sitter parser (needs Node).
+    Grammar {
+        /// Also run the grammar's corpus tests.
+        #[arg(long)]
+        test: bool,
+    },
     /// Launch the release app on a fresh data dir and capture its window to a PNG.
     Screenshot {
         /// Seconds to wait before capturing.
@@ -78,6 +85,7 @@ fn main() -> Result<()> {
         Cmd::SpecCoverage { enforce } => spec_coverage::run(&root, enforce),
         Cmd::Testenv { cmd } => testenv::run(&root, cmd),
         Cmd::Bench { list, check } => bench(&root, list, check),
+        Cmd::Grammar { test } => grammar::run(&root, test),
         Cmd::Screenshot {
             delay,
             out,

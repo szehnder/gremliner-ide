@@ -1,0 +1,12 @@
+---
+source: crates/gremlin-syntax/src/format.rs
+assertion_line: 247
+expression: once
+---
+g.V().
+  has('person', 'name', 'marko').
+  where(
+    __.out('created').has('lang', 'java').in('created').has('age', P.gt(30))).
+  project('name', 'friends').
+  by('name').
+  by(out('knows').values('name').fold())
