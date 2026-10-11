@@ -37,6 +37,7 @@ fn init_app(cx: &mut TestAppContext, storage: Option<Storage>) {
             ShellConfig {
                 storage,
                 theme_override: None,
+                secrets: Some(std::sync::Arc::new(storage::secrets::MemoryStore::default())),
             },
             cx,
         );

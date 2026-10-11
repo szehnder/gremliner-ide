@@ -1,6 +1,7 @@
 //! Headless Gremliner CLI. Every non-UI capability is exposed here so agents can verify behaviour
 //! without the GUI (ADR-0024). Subcommands are added by the OpenSpec change that implements them.
 
+mod connections;
 mod query;
 mod render_bench;
 
@@ -13,6 +14,9 @@ use clap::{Parser, Subcommand};
     about = "Headless Gremliner IDE tools"
 )]
 struct Cli {
+    /// App data directory (default: the platform data directory, shared with the app).
+    #[arg(long, global = true, env = "GREMLINER_DATA_DIR")]
+    data_dir: Option<std::path::PathBuf>,
     #[command(subcommand)]
     command: Command,
 }
@@ -21,6 +25,11 @@ struct Cli {
 enum Command {
     /// Print the version.
     Version,
+    /// Manage saved connections (shared with the app).
+    Connections {
+        #[command(subcommand)]
+        cmd: connections::Cmd,
+    },
     /// Run a Gremlin script against a server and print the results.
     Query {
         /// Server WebSocket URL.
@@ -69,7 +78,9 @@ fn main() -> anyhow::Result<()> {
         .worker_threads(2)
         .enable_all()
         .build()?;
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Connections { cmd } => connections::run(cmd, cli.data_dir, &runtime)?,
         Command::Query {
             url,
             alias,

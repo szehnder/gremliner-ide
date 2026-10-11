@@ -20,6 +20,7 @@ tracing.workspace = true
 base64.workspace = true
 http.workspace = true
 simd-json.workspace = true
+rustls.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process"] }

@@ -34,7 +34,7 @@ struct Args {
     /// Keep all state in memory for this run.
     #[arg(long)]
     no_persist: bool,
-    /// Open a saved connection by name on startup (accepted now; implemented by the `connections` change).
+    /// Connect to a saved connection by name on startup.
     #[arg(long, value_name = "NAME")]
     open_connection: Option<String>,
     /// Dispatch an action after the window opens, e.g. `workspace::OpenCommandPalette` (repeatable;
@@ -99,17 +99,24 @@ fn open_storage(args: &Args) -> Option<Storage> {
     }
 }
 
+/// env_logger behind the secret redactor (ADR-0034): registered secrets never reach the log.
+fn init_logging() {
+    let logger =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).build();
+    let max_level = logger.filter();
+    if log::set_boxed_logger(Box::new(storage::secrets::RedactingLogger::new(logger))).is_ok() {
+        log::set_max_level(max_level);
+    }
+}
+
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    init_logging();
     let args = Args::parse();
     let graph = args
         .render_bench
         .as_deref()
         .or(args.graph_demo.as_deref())
         .map(|s| parse_pair(s).unwrap_or_else(|| panic!("expected NODES,EDGES, got {s:?}")));
-    if let Some(name) = &args.open_connection {
-        log::warn!("--open-connection {name:?}: connections are not implemented yet; ignoring");
-    }
     if args.run.is_some() {
         log::warn!("--run: query execution is not implemented yet; ignoring");
     }
@@ -141,6 +148,7 @@ fn main() {
                     ShellConfig {
                         storage,
                         theme_override: args.theme.map(Into::into),
+                        secrets: None,
                     },
                     cx,
                 );
@@ -194,6 +202,14 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
     match opened {
         Ok((handle, _)) => {
             let commands = args.commands.clone();
+            if let Some(name) = &args.open_connection {
+                let manager = ui_workspace::connections::ConnectionManager::global(cx);
+                let id = manager.read(cx).find_by_name(name).map(|c| c.id);
+                match id {
+                    Some(id) => manager.update(cx, |m, cx| m.connect(id, cx)).detach(),
+                    None => log::error!("--open-connection: no saved connection named {name:?}"),
+                }
+            }
             let _ = handle.update(cx, |_, window, _| {
                 // Actions route through the rendered element tree, so they wait for the first frame.
                 window.on_next_frame(move |window, cx| {

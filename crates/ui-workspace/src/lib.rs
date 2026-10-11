@@ -5,6 +5,7 @@
 
 pub mod actions;
 pub mod assets;
+pub mod connections;
 pub mod io;
 pub mod keymap;
 pub mod palette;
@@ -31,6 +32,8 @@ pub struct ShellConfig {
     pub storage: Option<Storage>,
     /// Overrides the saved theme for this run (`--theme`), without persisting it.
     pub theme_override: Option<theme::ThemeChoice>,
+    /// Where passwords go; `None` uses the OS credential store, probed on first use (ADR-0034).
+    pub secrets: Option<std::sync::Arc<dyn storage::secrets::SecretStore>>,
 }
 
 /// Initialise the shell. Call after `gpui_kit::init` and `io::install`.
@@ -57,6 +60,15 @@ pub fn init(config: ShellConfig, cx: &mut App) {
         .map(RecentCommands)
         .unwrap_or_default();
     cx.set_global(recent);
+    let connection_db = match &config.storage {
+        Some(storage) => Some(storage.clone()),
+        None => Storage::open_in_memory()
+            .inspect_err(|err| log::error!("in-memory database unavailable: {err}"))
+            .ok(),
+    };
+    if let Some(db) = connection_db {
+        connections::ConnectionManager::init(db, config.secrets, cx);
+    }
     AppSettings::init(general, config.storage, cx);
 }
 

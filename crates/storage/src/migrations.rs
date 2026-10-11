@@ -18,6 +18,16 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL,
         updated_at INTEGER NOT NULL
     );",
+    // 2: saved connections. `config` is the provider-specific JSON; secrets are never stored here.
+    "CREATE TABLE connections (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        config TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        group_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );",
 ];
 
 /// The schema version after every migration has run.

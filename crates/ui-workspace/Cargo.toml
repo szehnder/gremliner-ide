@@ -20,11 +20,13 @@ serde_json.workspace = true
 log.workspace = true
 anyhow.workspace = true
 nucleo-matcher.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 futures = { workspace = true, features = ["executor"] }
+gremlin-client = { workspace = true, features = ["testenv"] }
 
 [lints]
 workspace = true

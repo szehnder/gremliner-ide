@@ -8,7 +8,6 @@ use gpui_kit::component::dock::{
     DockArea, DockEvent, DockLayout, DockPlacement, DockSkin, panel_handle,
 };
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::component::notification::Notification;
 use gpui_kit::component::{
     ActiveTheme as _, IconName, Selectable as _, Sizable as _, WindowExt as _, h_flex, v_flex,
 };
@@ -203,9 +202,19 @@ impl Workspace {
             .update(cx, |dock, cx| dock.toggle_dock(placement, window, cx));
     }
 
-    fn command_context(&self, _: &App) -> CommandContext {
-        // Editors and connections arrive with later changes; until then neither is ever present.
-        CommandContext::default()
+    fn command_context(&self, cx: &App) -> CommandContext {
+        let manager = crate::connections::ConnectionManager::global(cx);
+        let connected = manager.read(cx).active().is_some_and(|c| {
+            matches!(
+                manager.read(cx).status(c.id),
+                crate::connections::ConnStatus::Connected(_)
+            )
+        });
+        // Editors arrive with the query-editor change.
+        CommandContext {
+            editor_open: false,
+            connected,
+        }
     }
 
     fn open_palette(
@@ -431,11 +440,7 @@ impl Render for Workspace {
                 confirm_reset_general(window, cx);
             }))
             .on_action(cx.listener(|_, _: &AddConnection, window, cx| {
-                window.push_notification(
-                    Notification::info("Adding connections isn't available in this build yet.")
-                        .title("Coming soon"),
-                    cx,
-                );
+                crate::connections::form::open(None, window, cx);
             }))
             .on_action(cx.listener(|this, _: &Quit, window, cx| {
                 this.save_now(window, cx);

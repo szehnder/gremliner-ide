@@ -1,0 +1,104 @@
+//! Integration tests against the Docker testenv (skipped with a message when it is not running).
+
+#![allow(clippy::unwrap_used)]
+
+use std::time::{Duration, Instant};
+
+use gremlin_client::require_testenv;
+use gremlin_client::testenv::{AUTH_PASSWORD, AUTH_URL, AUTH_USER};
+use providers::endpoint;
+use providers::{
+    ConnectionConfig, FailureKind, GremlinServerConfig, ProviderConfig, gremlin_server,
+    provider_for, test_connection,
+};
+
+fn config_for(url: &str, alias: &str) -> ConnectionConfig {
+    let parsed = endpoint::parse(url).unwrap();
+    ConnectionConfig::new(
+        "test",
+        ProviderConfig::GremlinServer(GremlinServerConfig {
+            host: parsed.host,
+            port: parsed.port.unwrap(),
+            alias: alias.into(),
+            ..Default::default()
+        }),
+    )
+}
+
+#[tokio::test]
+async fn scenario_provider_gremlin_server_detect_tinkerpop_version() {
+    let url = require_testenv!();
+    let config = config_for(&url, "g");
+    let session = provider_for(&config, None)
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+    let version = session.info.tinkerpop_version.clone().unwrap();
+    assert!(version.starts_with("3.7."), "{version}");
+    assert!(session.capabilities.profile && session.capabilities.explain);
+    assert!(session.capabilities.script_eval);
+}
+
+#[tokio::test]
+async fn scenario_provider_gremlin_server_use_gmodern_alias() {
+    let url = require_testenv!();
+    let session = provider_for(&config_for(&url, "gModern"), None)
+        .unwrap()
+        .connect()
+        .await
+        .unwrap();
+    let count = gremlin_server::execute(&session, "g.V().count()")
+        .await
+        .unwrap();
+    assert_eq!(count[0].as_i64(), Some(6));
+}
+
+#[tokio::test]
+async fn scenario_connections_successful_test() {
+    let url = require_testenv!();
+    let report = test_connection(&config_for(&url, "g"), None).await;
+    let info = report.result.unwrap();
+    assert!(info.latency < Duration::from_secs(5));
+    assert!(info.tinkerpop_version.is_some());
+}
+
+#[tokio::test]
+async fn scenario_connections_unreachable_host() {
+    // A port where nothing listens: bind, note the port, close.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let mut config = config_for(&format!("ws://127.0.0.1:{port}/gremlin"), "g");
+    config.timeout_ms = 3_000;
+    let started = Instant::now();
+    let report = test_connection(&config, None).await;
+    let err = report.result.unwrap_err();
+    assert_eq!(err.kind, FailureKind::Unreachable, "{err:?}");
+    assert_eq!(
+        err.reason,
+        format!("Nothing is listening on 127.0.0.1:{port}.")
+    );
+    assert!(!err.suggestion.is_empty());
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+#[tokio::test]
+async fn authenticates_and_reports_bad_passwords() {
+    require_testenv!(AUTH_URL);
+    let mut config = config_for(AUTH_URL, "g");
+    if let ProviderConfig::GremlinServer(c) = &mut config.provider {
+        c.username = Some(AUTH_USER.into());
+        c.has_password = true;
+    }
+    assert!(
+        test_connection(&config, Some(AUTH_PASSWORD.into()))
+            .await
+            .result
+            .is_ok()
+    );
+    let bad = test_connection(&config, Some("wrong-password".into())).await;
+    assert_eq!(bad.result.unwrap_err().kind, FailureKind::Auth);
+}

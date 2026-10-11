@@ -29,7 +29,9 @@ pub fn check(root: &Path) -> Result<()> {
                 if line.contains("token-check: allow") || line.trim_start().starts_with("//") {
                     continue;
                 }
-                if let Some(p) = PATTERNS.iter().find(|p| line.contains(*p)) {
+                // `-> Hsla {` is a return type, not a colour literal.
+                let code = line.replace("-> Hsla {", "");
+                if let Some(p) = PATTERNS.iter().find(|p| code.contains(*p)) {
                     hits.push(format!(
                         "{}:{}: raw `{p}`; use a theme token",
                         rel.display(),

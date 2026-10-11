@@ -85,9 +85,12 @@ impl Connection {
                 request.headers_mut().insert(k.clone(), v.clone());
             }
         }
+        let connector = config
+            .accept_invalid_certs
+            .then(|| tokio_tungstenite::Connector::Rustls(crate::tls::insecure_client_config()));
         let (ws, _resp) = tokio::time::timeout(
             config.connect_timeout,
-            tokio_tungstenite::connect_async(request),
+            tokio_tungstenite::connect_async_tls_with_config(request, None, false, connector),
         )
         .await
         .map_err(|_| connect_err(format!("timed out after {:?}", config.connect_timeout)))?

@@ -155,6 +155,8 @@ impl Tokens {
     }
     /// Width of the command palette dialog (gpui-kit dialogs take pixels).
     pub const PALETTE_WIDTH: Pixels = px(620.0);
+    /// Width of the connection dialog.
+    pub const CONNECTION_DIALOG_WIDTH: Pixels = px(600.0);
     /// Width of the keyboard shortcuts dialog.
     pub const SHORTCUTS_WIDTH: Pixels = px(560.0);
     /// Distance of dialogs from the top of the window.

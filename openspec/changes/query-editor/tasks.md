@@ -16,6 +16,7 @@
 - [ ] 3.1 Connection picker per tab and default to last used; verify `scenario_query_editor_new_tab_defaults`
 - [ ] 3.2 Reorder, split, dirty marker; verify `scenario_query_editor_split_editor`
 - [ ] 3.3 Persist and restore tabs; verify `scenario_query_editor_restore_tabs`
+- [ ] 3.4 Show the bound connection's colour and environment badge on each tab (production in the danger colour, `connections::style::environment_badge`); extend `scenario_connections_production_badge` to assert the tab badge
 
 ## 4. Performance
 

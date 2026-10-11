@@ -10,6 +10,8 @@
 - [ ] 2.1 Startup optimisation pass until under 300 ms; verify the cold-start measurement
 - [ ] 2.2 Idle memory pass until under 150 MB; verify the idle-memory measurement
 
+- [ ] 2.3 Cold start is ~2 s to first frame on the dev laptop: ~1 s enumerating every wgpu adapter (NVIDIA Vulkan + GL) and ~1 s before the first frame. Investigate restricting backends / adapter probing and pipeline caching (measured 2026-10-11, `RUST_LOG=gpui_wgpu=info`)
+
 ## 3. CI
 
 - [ ] 3.1 Baseline job on main and relative check on PRs; verify the workflow

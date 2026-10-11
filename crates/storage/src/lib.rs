@@ -5,7 +5,11 @@
 //! executor-agnostic futures (a oneshot channel), which GPUI tasks and tokio tasks can both await. The
 //! `*_blocking` variants exist only for startup, before the first frame, and for tests.
 
+mod connections;
 mod migrations;
+pub mod secrets;
+
+pub use connections::ConnectionRow;
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -37,6 +41,8 @@ pub enum StorageError {
     },
     #[error("the storage thread has stopped")]
     Closed,
+    #[error("a connection named {0:?} already exists")]
+    NameTaken(String),
 }
 
 pub type Result<T, E = StorageError> = std::result::Result<T, E>;

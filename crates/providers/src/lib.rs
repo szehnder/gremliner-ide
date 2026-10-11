@@ -1,11 +1,20 @@
-//! GraphProvider trait and Gremlin Server / Neptune providers (ADR-0015).
-//!
-//! See `AGENTS.md` for crate layering rules and `openspec/ROADMAP.md` for the change that fills this crate in.
+//! Graph database providers (ADR-0015): saved connection settings, the provider abstraction, the Gremlin
+//! Server provider, connection testing, the read-only guard, and the connection store.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_compiles() {
-        assert_eq!(env!("CARGO_PKG_NAME"), "providers");
-    }
-}
+pub mod config;
+pub mod endpoint;
+pub mod error;
+pub mod gremlin_server;
+pub mod provider;
+pub mod read_only;
+pub mod store;
+
+pub use config::{
+    ColorTag, ConnectionConfig, Environment, GremlinServerConfig, NeptuneConfig, ProviderConfig,
+    ProviderKind,
+};
+pub use error::{FailureKind, ProviderError};
+pub use provider::{
+    Capabilities, GraphProvider, ServerInfo, Session, TestReport, provider_for, test_connection,
+};
+pub use store::{ConnectionStore, NameError, PasswordChange, StoreError, validate_name};

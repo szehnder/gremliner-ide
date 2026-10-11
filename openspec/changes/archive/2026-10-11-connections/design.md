@@ -36,3 +36,24 @@ wire. See proposal.md.
 - `cargo test -p providers -p storage` (unit + testenv integration for test-connection and alias).
 - `cargo run -p gremliner-cli -- connections add --name Local --url ws://localhost:8182/gremlin && cargo run -p gremliner-cli -- connections test Local`.
 - Headless UI tests for the form (paste-to-fill, validation) and sidebar status.
+
+## As built (deviations and additions)
+
+- **Secrets fallback** is session-only memory, not an encrypted file, and the keychain is probed lazily
+  (ADR-0034). `GREMLINER_SECRET_STORE=memory` forces it. Redaction wraps the `log` facade
+  (`storage::secrets::RedactingLogger`) instead of a `tracing` layer.
+- **Config:** `GremlinServerConfig.has_password` marks a stored secret (account `<id>/password`); the
+  `password_ref` field of the sketch is implied by the id. `NeptuneAws` exists as a config variant so
+  paste-to-fill can select it; connecting reports "not available yet" until `provider-neptune-aws`.
+- **Provider trait** currently has `kind()` and `connect()`; profile/explain/schema join with the changes
+  that use them. Connect runs `g.inject(1)` (proves alias and credentials, measures latency) and then
+  `Gremlin.version()` for the TinkerPop version.
+- **URL parsing** uses the `url` crate plus a suffix check for Neptune hostnames (no regex dependency).
+- **TLS:** `accept_invalid_certs` is implemented in `gremlin-client` with a rustls verifier that skips chain
+  and host-name checks but still verifies handshake signatures.
+- **Paste detection:** a multi-character insertion into the host field is treated as a paste, so typing
+  `host:8182` key by key is never rewritten mid-word.
+- **Production badge:** shown in the status bar and the sidebar; the per-tab badge lands with
+  `query-editor` (no editor tabs exist yet). **Read-only:** `providers::read_only::check` implements the
+  block and the explicit override; the "Run anyway" confirmation UI lands with `query-execution`.
+- **`--open-connection NAME`** now connects on startup.

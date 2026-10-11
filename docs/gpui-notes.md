@@ -62,3 +62,13 @@ Lessons learned while building with gpui-kit 0.7.x (`gpui-pre` 0.3.x). Add to th
   reachable only inside gpui). Keep the observer thin and test the handler it calls.
 - **`--command <action>`** (e.g. `workspace::OpenCommandPalette`) dispatches any registered action after
   the first frame; combine with `cargo xtask screenshot` to capture a specific UI state.
+
+## Screenshots on the dev machine (KDE Wayland)
+- Windows launched by `cargo xtask screenshot` from an agent's shell receive one or two frames and then no
+  more Wayland frame callbacks (even `--perf-hud`, which requests every frame, records a single interval),
+  although spectacle captures them as the active window. Background results that arrive later (a
+  connection finishing, a query completing) are therefore not visible in the PNG. Capture states that exist
+  by the second frame (`--command` dispatches right after the first) and verify asynchronous behaviour with
+  headless tests and logs (`RUST_LOG=ui_workspace=info` logs connection status changes). Interactive
+  launches by the user are not affected in the same way; see `docs/benchmarks/graph-canvas-spike.md` for the
+  frame-pacing notes from the render gate.

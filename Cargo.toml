@@ -77,6 +77,8 @@ criterion = { version = "0.7", default-features = false, features = ["cargo_benc
 simd-json = { version = "0.17", default-features = false, features = ["serde_impl", "swar-number-parsing", "runtime-detection"] }
 rustc-hash = "2"
 nucleo-matcher = "0.3"
+url = "2"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

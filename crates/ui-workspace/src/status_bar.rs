@@ -4,6 +4,8 @@ use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex};
 use gpui_kit::*;
 
+use crate::connections::ConnectionManager;
+use crate::connections::style::{color_tag_color, environment_badge, status_dot};
 use crate::io::Activity;
 use crate::settings::AppSettings;
 use crate::theme::{DEFAULT_UI_FONT_SIZE, Tokens};
@@ -19,6 +21,7 @@ impl StatusBar {
         let subscriptions = vec![
             cx.observe(&activity, |_, _, cx| cx.notify()),
             cx.observe_global::<AppSettings>(|_, cx| cx.notify()),
+            cx.observe(&ConnectionManager::global(cx), |_, _, cx| cx.notify()),
         ];
         Self {
             activity,
@@ -43,15 +46,37 @@ impl Render for StatusBar {
                 .text_color(theme.muted_foreground)
         };
 
-        let connection = item()
-            .id("status-connection")
-            .child(
-                div()
-                    .size(Tokens::size(7.0))
-                    .rounded_full()
-                    .bg(theme.muted_foreground.opacity(0.6)),
-            )
-            .child("Not connected");
+        let manager = ConnectionManager::global(cx).read(cx);
+        let connection = match manager.active() {
+            Some(active) => {
+                let status = manager.status(active.id);
+                item()
+                    .id("status-connection")
+                    .test_support()
+                    .child(status_dot(&status, cx))
+                    .children(
+                        color_tag_color(active.color, cx)
+                            .map(|c| div().size(Tokens::size(7.0)).rounded_full().bg(c)),
+                    )
+                    .child(
+                        div()
+                            .text_color(theme.foreground)
+                            .child(active.name.clone()),
+                    )
+                    .children(environment_badge(active.environment, cx))
+                    .child(status.label())
+            }
+            None => item()
+                .id("status-connection")
+                .test_support()
+                .child(
+                    div()
+                        .size(Tokens::size(7.0))
+                        .rounded_full()
+                        .bg(theme.muted_foreground.opacity(0.6)),
+                )
+                .child("Not connected"),
+        };
 
         let busy = activity.map(|label| {
             item()

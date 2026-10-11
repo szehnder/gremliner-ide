@@ -8,6 +8,8 @@
 - [ ] 1.4 Result cap; verify `scenario_query_execution_truncated_result`
 - [ ] 1.5 Error view and editor range highlight; verify `scenario_query_execution_server_error_view`
 
+- [ ] 1.6 Enforce read-only connections with `providers::read_only::check` before submitting; show the explanation and a "Run anyway" button that requires confirmation and applies to that single execution; extend `scenario_connections_mutation_blocked` with the UI flow
+
 ## 2. Normalisation
 
 - [ ] 2.1 `ResultShape` classification and `TableModel`/`TreeModel` builders with insta tests; verify `scenario_query_execution_elements_open_in_table`

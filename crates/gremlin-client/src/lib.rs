@@ -16,6 +16,7 @@
 
 mod connection;
 mod error;
+mod tls;
 
 #[cfg(any(test, feature = "testenv"))]
 pub mod testenv;
@@ -72,6 +73,8 @@ pub struct ClientConfig {
     pub batch_size: Option<u32>,
     /// Keep the raw JSON of each response frame (for console/JSON views).
     pub keep_raw: bool,
+    /// Skip TLS certificate verification (`wss://` to development servers with self-signed certs).
+    pub accept_invalid_certs: bool,
 }
 
 impl std::fmt::Debug for ClientConfig {
@@ -98,6 +101,7 @@ impl ClientConfig {
             request_timeout: Duration::from_secs(30),
             batch_size: None,
             keep_raw: false,
+            accept_invalid_certs: false,
         }
     }
 
