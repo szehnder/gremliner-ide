@@ -98,3 +98,24 @@ Lessons learned while building with gpui-kit 0.7.x (`gpui-pre` 0.3.x). Add to th
   with `closable() -> false`).
 - In headless tests `background_spawn` work runs on the test dispatcher's thread, so latency measurements
   include "background" work; real builds are faster.
+
+## Query execution and results
+- From async contexts (`cx.spawn`, `cx.spawn_in`), `entity.read_with(cx, ..)` and `entity.update(cx, ..)`
+  return the value directly in this GPUI version (no `Result`); `WeakEntity::update` still returns a
+  `Result`. `Task<T>` returned by an entity method can be awaited directly.
+- Bridging a tokio stream to the UI: run the stream on the I/O runtime (`spawn_io`), send messages over a
+  `futures::channel::mpsc` channel, and drain it in a `cx.spawn` task that updates the entity. Stop with a
+  `oneshot` the I/O loop `tokio::select!`s on.
+- **Don't rebuild views per batch.** A results view that clones all items and rebuilds its table model on
+  every batch went quadratic (609 rebuilds, 115 s for 57k edges). Read items in place (move them out of
+  the entity and back: `mem::take`), and throttle rebuilds adaptively: interval = max(100 ms, 4 × last
+  rebuild cost).
+- Key contexts can carry state: `KeyContext::new_with_defaults()` + `add("QueryRunning")` on the root while
+  a query runs, and bind Esc in `"QueryRunning > Input"` (`>` means any ancestor), so Esc cancels only then.
+- gpui-kit `TableDelegate::render_th` can replace the header cell entirely; we render our own sort headers
+  (ascending → descending → off) because the built-in cycle starts descending. `uniform_list` (gpui)
+  virtualises fixed-height rows: the JSON tree and console use it.
+- Test-dispatcher timers use a fake clock: a `background_executor().timer()` never fires in a test unless the
+  clock is advanced, so throttled work must also run on the final update.
+- Gremlin Server 3.7 keeps evaluating a script after the client stops reading (no protocol-level cancel
+  for sessionless `eval`); Cancel stops delivery, and the server stops at its evaluation timeout.

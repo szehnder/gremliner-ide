@@ -18,6 +18,7 @@ actions!(
         ZoomReset,
         AddConnection,
         NewQueryTab,
+        CancelQuery,
         SplitRight,
         SaveQuery,
         ResetGeneralSettings,

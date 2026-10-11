@@ -5,8 +5,10 @@
 //! [`graphson::decode`] turns a GraphSON v3 `serde_json::Value` into a `GValue`; [`graphson::encode`]
 //! does the reverse for request bindings.
 
+pub mod console;
 pub mod fast;
 pub mod graphson;
+pub mod normalize;
 pub mod plain;
 
 use std::fmt;

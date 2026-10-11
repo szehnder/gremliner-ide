@@ -8069,6 +8069,10 @@ dependencies = [
  "gpui-kit",
  "graph-canvas",
  "gremlin-model",
+ "log",
+ "regex",
+ "serde_json",
+ "ui-theme",
 ]
 
 [[package]]
@@ -8089,6 +8093,8 @@ dependencies = [
  "futures",
  "gpui-kit",
  "gremlin-client",
+ "gremlin-model",
+ "gremlin-syntax",
  "log",
  "nucleo-matcher",
  "providers",

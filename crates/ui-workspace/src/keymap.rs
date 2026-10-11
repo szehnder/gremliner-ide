@@ -27,6 +27,9 @@ pub fn bind_default_keys(cx: &mut App) {
         KeyBinding::new("secondary-\\", SplitRight, None),
         // Inside the editor these must beat the text input's own bindings (Ctrl+Enter inserts a newline,
         // Ctrl+/ is the global shortcuts key), so they bind in the more specific context.
+        // Esc cancels only while a query runs, so the editor keeps its own Escape otherwise.
+        KeyBinding::new("escape", CancelQuery, Some("QueryRunning")),
+        KeyBinding::new("escape", CancelQuery, Some("QueryRunning > Input")),
         KeyBinding::new("secondary-enter", editor::RunQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("alt-enter", editor::RunQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("shift-alt-f", editor::FormatQuery, Some(EDITOR_INPUT)),

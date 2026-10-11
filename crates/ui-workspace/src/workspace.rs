@@ -17,11 +17,12 @@ use storage::Storage;
 use crate::actions::*;
 use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
 use crate::panels::{
-    ConnectionsPanel, EditorPanel, EditorTabs, InspectorPanel, ResultsPanel, SettingsPanel,
-    WelcomePanel, WorkspacePanel, confirm_reset_general,
+    ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, InspectorPanel, ResultsPanel,
+    SettingsPanel, WelcomePanel, WorkspacePanel, confirm_reset_general,
 };
 use crate::perf_hud::PerfHud;
 use crate::persist::{self, LAYOUT_VERSION, LayoutProblem, WindowGeometry};
+use crate::run::{Runner, RunnerEvent};
 use crate::settings::AppSettings;
 use crate::status_bar::StatusBar;
 use crate::theme::{DEFAULT_UI_FONT_SIZE, FONT_SIZE_STEP, Tokens};
@@ -99,6 +100,28 @@ impl Workspace {
                 AppSettings::set_appearance(window.appearance(), cx);
             }),
             cx.observe_window_bounds(window, |this, window, cx| this.schedule_save(window, cx)),
+            cx.subscribe_in(
+                &EditorTabs::global(cx),
+                window,
+                |_, _, event: &EditorTabsEvent, window, cx| {
+                    if let EditorTabsEvent::RunRequested(request) = event {
+                        let request = request.clone();
+                        Runner::global(cx).update(cx, |r, cx| r.request(request, window, cx));
+                    }
+                },
+            ),
+            cx.subscribe_in(
+                &Runner::global(cx),
+                window,
+                |this, _, event: &RunnerEvent, window, cx| {
+                    if *event == RunnerEvent::Started
+                        && !this.dock.read(cx).is_dock_open(DockPlacement::Bottom)
+                    {
+                        this.toggle(DockPlacement::Bottom, window, cx);
+                    }
+                    cx.notify();
+                },
+            ),
             // The welcome view hides while tabs are open; re-render the dock when that changes.
             cx.observe(&EditorTabs::global(cx), |this, _, cx| {
                 this.dock.update(cx, |_, cx| cx.notify());
@@ -328,6 +351,29 @@ impl Workspace {
         });
     }
 
+    /// Open a tab with `text` bound to `connection`, and run it (the `--run` flag).
+    pub fn open_and_run(
+        &mut self,
+        text: &str,
+        connection: Option<uuid::Uuid>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let tab = self.new_tab(window, cx);
+        let text = text.to_owned();
+        tab.update(cx, |tab, cx| {
+            if connection.is_some() {
+                tab.set_connection(connection, cx);
+            }
+            let editor = tab.editor().clone();
+            editor.update(cx, |e, cx| {
+                e.set_text(&text, window, cx);
+                e.state().update(cx, |s, cx| s.set_selected_range(0..0, cx));
+                e.run(&crate::actions::editor::RunQuery, window, cx);
+            });
+        });
+    }
+
     /// Open a new editor tab in the editor area and focus it.
     pub fn new_tab(
         &mut self,
@@ -487,9 +533,14 @@ impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let hud = self.perf_hud.as_mut().map(|hud| hud.frame(window, cx));
         let theme = cx.theme();
+        let mut context = KeyContext::new_with_defaults();
+        context.add("Workspace");
+        if Runner::global(cx).read(cx).is_running() {
+            context.add("QueryRunning");
+        }
         v_flex()
             .id("workspace")
-            .key_context("Workspace")
+            .key_context(context)
             .track_focus(&self.focus_handle)
             .size_full()
             .relative()
@@ -515,6 +566,9 @@ impl Render for Workspace {
                 this.new_tab(window, cx);
             }))
             .on_action(cx.listener(|this, _: &SplitRight, window, cx| this.split_right(window, cx)))
+            .on_action(cx.listener(|_, _: &CancelQuery, _, cx| {
+                Runner::global(cx).update(cx, |r, cx| r.cancel(cx));
+            }))
             .on_action(cx.listener(|this, _: &SaveQuery, window, cx| {
                 if let Some(tab) = this.current_tab(window, cx) {
                     tab.update(cx, |tab, cx| {

@@ -381,3 +381,24 @@ fn scenario_query_editor_large_file_typing(cx: &mut TestAppContext) {
     eprintln!("10k-line keystroke p95: {p95:?}");
     assert!(p95.as_millis() < budget_ms, "p95 {p95:?}");
 }
+
+#[gpui_kit::test]
+fn new_tab_numbers_continue_after_restored_tabs(cx: &mut TestAppContext) {
+    let (_s, ws, mut cx) = setup(cx);
+    let restored = cx.update(|window, cx| {
+        EditorPanel::from_row(
+            storage::TabRow {
+                id: uuid::Uuid::new_v4().to_string(),
+                title: "Query 4".into(),
+                content: String::new(),
+                cursor: 0,
+                connection_id: None,
+            },
+            window,
+            cx,
+        )
+    });
+    let _ = restored;
+    let tab = new_tab(&ws, &mut cx);
+    assert_eq!(cx.update(|_, cx| tab.read(cx).title_text()), "Query 5");
+}

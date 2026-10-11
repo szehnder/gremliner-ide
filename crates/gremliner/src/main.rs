@@ -41,7 +41,7 @@ struct Args {
     /// used by screenshots and agents to reach a UI state).
     #[arg(long = "command", value_name = "ACTION")]
     commands: Vec<String>,
-    /// Run a query on startup (accepted now; implemented by the `query-execution` change).
+    /// Open a tab with this query and run it on startup (on `--open-connection`'s connection).
     #[arg(long, value_name = "GREMLIN")]
     run: Option<String>,
     /// Run the scripted render benchmark on a synthetic graph: NODES,EDGES (e.g. 10000,20000), then exit.
@@ -117,9 +117,6 @@ fn main() {
         .as_deref()
         .or(args.graph_demo.as_deref())
         .map(|s| parse_pair(s).unwrap_or_else(|| panic!("expected NODES,EDGES, got {s:?}")));
-    if args.run.is_some() {
-        log::warn!("--run: query execution is not implemented yet; ignoring");
-    }
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .thread_name("gremliner-io")
@@ -200,20 +197,30 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
         workspace
     });
     match opened {
-        Ok((handle, _)) => {
+        Ok((handle, workspace)) => {
             let commands = args.commands.clone();
+            let mut connection = None;
             if let Some(name) = &args.open_connection {
                 let manager = ui_workspace::connections::ConnectionManager::global(cx);
-                let id = manager.read(cx).find_by_name(name).map(|c| c.id);
-                match id {
-                    Some(id) => manager.update(cx, |m, cx| m.connect(id, cx)).detach(),
+                connection = manager.read(cx).find_by_name(name).map(|c| c.id);
+                match connection {
+                    Some(id) if args.run.is_none() => {
+                        manager.update(cx, |m, cx| m.connect(id, cx)).detach()
+                    }
+                    Some(_) => {}
                     None => log::error!("--open-connection: no saved connection named {name:?}"),
                 }
             }
+            let run = args.run.clone();
+            let workspace = workspace.clone();
             let _ = handle.update(cx, |_, window, _| {
                 // Actions route through the rendered element tree, so they wait for the first frame.
                 window.on_next_frame(move |window, cx| {
                     log::info!("first frame rendered");
+                    if let Some(query) = &run {
+                        workspace
+                            .update(cx, |ws, cx| ws.open_and_run(query, connection, window, cx));
+                    }
                     for name in &commands {
                         match cx.build_action(name, None) {
                             Ok(action) => window.dispatch_action(action, cx),

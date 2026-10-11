@@ -45,6 +45,7 @@ pub struct QueryEditor {
     analysis: Option<Task<()>>,
     diagnostics: Vec<Diagnostic>,
     statement_highlight: RangeDecorationCollection,
+    error_highlight: RangeDecorationCollection,
     highlighted: Option<Range<usize>>,
     last_cursor: usize,
     focus_handle: FocusHandle,
@@ -66,6 +67,9 @@ impl QueryEditor {
         let statement_highlight = state.update(cx, |s, cx| {
             s.create_range_decorations_collection(Vec::new(), cx)
         });
+        let error_highlight = state.update(cx, |s, cx| {
+            s.create_range_decorations_collection(Vec::new(), cx)
+        });
         let subscriptions = vec![
             cx.subscribe_in(&state, window, |this, _, event: &InputEvent, _, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -84,6 +88,7 @@ impl QueryEditor {
             state,
             diagnostics: Vec::new(),
             statement_highlight,
+            error_highlight,
             highlighted: None,
             last_cursor: usize::MAX,
             focus_handle: cx.focus_handle(),
@@ -129,6 +134,7 @@ impl QueryEditor {
         let (range, inserted) = diff(&self.latest_text, &new);
         self.latest_text = new;
         self.revision += 1;
+        self.error_highlight.clear(cx);
         let revision = self.revision;
         cx.emit(QueryEditorEvent::Changed);
 
@@ -321,6 +327,22 @@ impl QueryEditor {
             state.replace(toggled.clone(), window, cx);
             state.set_selected_range(span.start..span.start + toggled.len(), cx);
         });
+    }
+
+    /// Mark the range a server error refers to (or clear it with `None`).
+    pub fn set_error_range(&mut self, range: Option<Range<usize>>, cx: &mut Context<'_, Self>) {
+        let len = self.latest_text.len();
+        let decorations = range
+            .filter(|r| r.end <= len)
+            .map(|r| {
+                vec![
+                    RangeDecoration::new(r)
+                        .with_style(RangeDecorationStyle::Frame)
+                        .with_color(tokens::error(cx)),
+                ]
+            })
+            .unwrap_or_default();
+        self.error_highlight.set(decorations, cx);
     }
 
     /// Move the cursor to a diagnostic (problems list click).

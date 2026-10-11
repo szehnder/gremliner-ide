@@ -131,6 +131,33 @@ fn general_page() -> SettingPage {
                     )
                     .description("Also changed with Ctrl+= and Ctrl+-."),
                 )
+                .item(
+                    SettingItem::new(
+                        "Result limit",
+                        SettingField::number_input(
+                            NumberFieldOptions {
+                                min: 1.0,
+                                #[allow(clippy::cast_precision_loss)]
+                                max: crate::settings::MAX_RESULT_LIMIT as f64,
+                                step: 1000.0,
+                            },
+                            #[allow(clippy::cast_precision_loss)]
+                            |cx| AppSettings::general(cx).result_limit as f64,
+                            |value, cx| {
+                                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                                let value = value.max(1.0) as usize;
+                                AppSettings::update_general(cx, |g| g.result_limit = value);
+                            },
+                        )
+                        .default_value(
+                            #[allow(clippy::cast_precision_loss)]
+                            {
+                                crate::settings::DEFAULT_RESULT_LIMIT as f64
+                            },
+                        ),
+                    )
+                    .description("Queries stop collecting results after this many items."),
+                )
                 .item(SettingItem::new(
                     "Editor font size",
                     font_size_field(

@@ -83,6 +83,15 @@ impl EditorTabs {
     }
 
     fn add(&mut self, tab: &Entity<EditorPanel>, cx: &mut Context<'_, Self>) {
+        // Restored "Query N" tabs push numbering past N, so new tabs never repeat a name.
+        if let Some(n) = tab
+            .read(cx)
+            .title
+            .strip_prefix("Query ")
+            .and_then(|n| n.parse::<usize>().ok())
+        {
+            self.next_number = self.next_number.max(n + 1);
+        }
         self.tabs.retain(|t| t.upgrade().is_some());
         self.tabs.push(tab.downgrade());
         cx.emit(EditorTabsEvent::TabsChanged);

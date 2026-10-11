@@ -17,7 +17,13 @@ pub struct GeneralSettings {
     pub theme: ThemeChoice,
     pub ui_font_size: f32,
     pub editor_font_size: f32,
+    /// Maximum result items collected per query.
+    pub result_limit: usize,
 }
+
+/// Default and bounds for [`GeneralSettings::result_limit`].
+pub const DEFAULT_RESULT_LIMIT: usize = 10_000;
+pub const MAX_RESULT_LIMIT: usize = 1_000_000;
 
 impl Default for GeneralSettings {
     fn default() -> Self {
@@ -25,6 +31,7 @@ impl Default for GeneralSettings {
             theme: ThemeChoice::System,
             ui_font_size: DEFAULT_UI_FONT_SIZE,
             editor_font_size: DEFAULT_EDITOR_FONT_SIZE,
+            result_limit: DEFAULT_RESULT_LIMIT,
         }
     }
 }
@@ -33,6 +40,7 @@ impl GeneralSettings {
     fn normalized(mut self) -> Self {
         self.ui_font_size = theme::clamp_font_size(self.ui_font_size);
         self.editor_font_size = theme::clamp_font_size(self.editor_font_size);
+        self.result_limit = self.result_limit.clamp(1, MAX_RESULT_LIMIT);
         self
     }
 

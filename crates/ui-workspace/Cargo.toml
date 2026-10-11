@@ -21,6 +21,9 @@ serde_json.workspace = true
 log.workspace = true
 nucleo-matcher.workspace = true
 uuid.workspace = true
+gremlin-client.workspace = true
+gremlin-model.workspace = true
+gremlin-syntax.workspace = true
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }

@@ -31,6 +31,8 @@ impl GremlinServerProvider {
         let mut cfg = ClientConfig::new(self.config.url());
         cfg.request_timeout = self.timeout;
         cfg.accept_invalid_certs = self.config.accept_invalid_certs;
+        // The console's raw mode shows responses exactly as received.
+        cfg.keep_raw = true;
         if let Some(user) = self.config.username.as_deref().filter(|u| !u.is_empty()) {
             cfg = cfg.credentials(user, self.password.clone().unwrap_or_default());
         }

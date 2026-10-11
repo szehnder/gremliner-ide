@@ -1,11 +1,11 @@
-//! Results views: table, JSON, console, graph, profile.
-//!
-//! See `AGENTS.md` for crate layering rules and `openspec/ROADMAP.md` for the change that fills this crate in.
+//! Results views: a streaming `ResultSet` model and its Table, JSON and Console views, hosted by
+//! `ResultsView` in the results dock.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_compiles() {
-        assert_eq!(env!("CARGO_PKG_NAME"), "ui-results");
-    }
-}
+pub mod console_view;
+pub mod json_view;
+pub mod result_set;
+pub mod results_view;
+pub mod table_view;
+
+pub use result_set::{ResultSet, ResultSetEvent, RunError, RunStatus, error_range};
+pub use results_view::{ResultsView, ResultsViewEvent, ViewKind};

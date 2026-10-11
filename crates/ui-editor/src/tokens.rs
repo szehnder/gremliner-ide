@@ -18,6 +18,11 @@ pub fn text_sm() -> Rems {
     Tokens::text_sm()
 }
 
+pub fn error(cx: &App) -> Hsla {
+    use gpui_kit::component::ActiveTheme as _;
+    cx.theme().danger
+}
+
 pub fn statement_highlight(cx: &App) -> Hsla {
     Tokens::statement_highlight(cx)
 }

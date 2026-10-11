@@ -12,6 +12,7 @@ pub mod palette;
 pub mod panels;
 pub mod perf_hud;
 pub mod persist;
+pub mod run;
 pub mod settings;
 pub mod status_bar;
 pub mod workspace;
@@ -41,6 +42,7 @@ pub fn init(config: ShellConfig, cx: &mut App) {
     theme::init(cx);
     ui_editor::register();
     panels::EditorTabs::init(cx);
+    run::Runner::init(cx);
     keymap::bind_default_keys(cx);
     panels::register_builtin(cx);
     register_commands(cx);
