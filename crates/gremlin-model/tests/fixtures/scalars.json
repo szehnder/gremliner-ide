@@ -1,0 +1,56 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:List",
+   "@value": [
+    {
+     "@type": "g:Int32",
+     "@value": 1
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 2
+    },
+    {
+     "@type": "g:Float",
+     "@value": 1.5
+    },
+    {
+     "@type": "g:Double",
+     "@value": 2.5
+    },
+    "x",
+    true,
+    {
+     "@type": "g:UUID",
+     "@value": "a8f0c2b4-7b1e-4c5f-9d3a-0e6f1b2c3d4e"
+    },
+    {
+     "@type": "g:Date",
+     "@value": 0
+    },
+    {
+     "@type": "gx:BigDecimal",
+     "@value": 3.14
+    },
+    {
+     "@type": "gx:BigInteger",
+     "@value": 7
+    },
+    {
+     "@type": "gx:Byte",
+     "@value": 1
+    },
+    {
+     "@type": "gx:Int16",
+     "@value": 2
+    },
+    {
+     "@type": "gx:Char",
+     "@value": "c"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,97 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        Vertex(
+            Vertex {
+                id: Int64(
+                    1,
+                ),
+                label: "person",
+                properties: {
+                    "name": [
+                        VertexProperty {
+                            id: Int64(
+                                0,
+                            ),
+                            label: "name",
+                            value: String(
+                                "marko",
+                            ),
+                            properties: {},
+                        },
+                    ],
+                    "location": [
+                        VertexProperty {
+                            id: Int64(
+                                6,
+                            ),
+                            label: "location",
+                            value: String(
+                                "san diego",
+                            ),
+                            properties: {
+                                "startTime": Int32(
+                                    1997,
+                                ),
+                                "endTime": Int32(
+                                    2001,
+                                ),
+                            },
+                        },
+                        VertexProperty {
+                            id: Int64(
+                                7,
+                            ),
+                            label: "location",
+                            value: String(
+                                "santa cruz",
+                            ),
+                            properties: {
+                                "startTime": Int32(
+                                    2001,
+                                ),
+                                "endTime": Int32(
+                                    2004,
+                                ),
+                            },
+                        },
+                        VertexProperty {
+                            id: Int64(
+                                8,
+                            ),
+                            label: "location",
+                            value: String(
+                                "brussels",
+                            ),
+                            properties: {
+                                "startTime": Int32(
+                                    2004,
+                                ),
+                                "endTime": Int32(
+                                    2005,
+                                ),
+                            },
+                        },
+                        VertexProperty {
+                            id: Int64(
+                                9,
+                            ),
+                            label: "location",
+                            value: String(
+                                "santa fe",
+                            ),
+                            properties: {
+                                "startTime": Int32(
+                                    2005,
+                                ),
+                            },
+                        },
+                    ],
+                },
+            },
+        ),
+    ],
+)

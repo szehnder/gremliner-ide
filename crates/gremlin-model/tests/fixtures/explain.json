@@ -1,0 +1,343 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:TraversalExplanation",
+   "@value": {
+    "@type": "g:Map",
+    "@value": [
+     "original",
+     {
+      "@type": "g:List",
+      "@value": [
+       "GraphStep(vertex,[])",
+       "VertexStep(OUT,vertex)",
+       "CountGlobalStep"
+      ]
+     },
+     "intermediate",
+     {
+      "@type": "g:List",
+      "@value": [
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "ConnectiveStrategy",
+         "category",
+         "DecorationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "CountStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "IdentityRemovalStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "ByModulatorOptimizationStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "MatchPredicateStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "FilterRankingStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "InlineFilterStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,vertex)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "IncidentToAdjacentStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "AdjacentToIncidentStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "EarlyLimitStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "RepeatUnrollStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "PathRetractionStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "LazyBarrierStrategy",
+         "category",
+         "OptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "GraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "TinkerGraphCountStrategy",
+         "category",
+         "ProviderOptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "TinkerGraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "TinkerGraphStepStrategy",
+         "category",
+         "ProviderOptimizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "TinkerGraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "ProfileStrategy",
+         "category",
+         "FinalizationStrategy"
+        ]
+       },
+       {
+        "@type": "g:Map",
+        "@value": [
+         "traversal",
+         {
+          "@type": "g:List",
+          "@value": [
+           "TinkerGraphStep(vertex,[])",
+           "VertexStep(OUT,edge)",
+           "CountGlobalStep"
+          ]
+         },
+         "strategy",
+         "StandardVerificationStrategy",
+         "category",
+         "VerificationStrategy"
+        ]
+       }
+      ]
+     },
+     "final",
+     {
+      "@type": "g:List",
+      "@value": [
+       "TinkerGraphStep(vertex,[])",
+       "VertexStep(OUT,edge)",
+       "CountGlobalStep"
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

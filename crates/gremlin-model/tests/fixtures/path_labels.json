@@ -1,0 +1,52 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:Path",
+   "@value": {
+    "labels": {
+     "@type": "g:List",
+     "@value": [
+      {
+       "@type": "g:Set",
+       "@value": [
+        "a"
+       ]
+      },
+      {
+       "@type": "g:Set",
+       "@value": [
+        "b"
+       ]
+      }
+     ]
+    },
+    "objects": {
+     "@type": "g:List",
+     "@value": [
+      {
+       "@type": "g:Vertex",
+       "@value": {
+        "id": {
+         "@type": "g:Int64",
+         "@value": 1
+        },
+        "label": "person"
+       }
+      },
+      {
+       "@type": "g:Vertex",
+       "@value": {
+        "id": {
+         "@type": "g:Int64",
+         "@value": 3
+        },
+        "label": "software"
+       }
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

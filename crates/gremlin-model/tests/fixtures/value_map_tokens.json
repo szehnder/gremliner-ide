@@ -1,0 +1,40 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:Map",
+   "@value": [
+    {
+     "@type": "g:T",
+     "@value": "id"
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 1
+    },
+    {
+     "@type": "g:T",
+     "@value": "label"
+    },
+    "person",
+    "name",
+    {
+     "@type": "g:List",
+     "@value": [
+      "marko"
+     ]
+    },
+    "age",
+    {
+     "@type": "g:List",
+     "@value": [
+      {
+       "@type": "g:Int32",
+       "@value": 29
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

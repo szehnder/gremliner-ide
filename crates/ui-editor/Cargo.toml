@@ -1,0 +1,14 @@
+[package]
+name = "ui-editor"
+description = "Gremlin editor built on the gpui-kit code editor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+gremlin-syntax.workspace = true
+gpui-kit.workspace = true
+
+[lints]
+workspace = true

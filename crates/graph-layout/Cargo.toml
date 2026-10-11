@@ -1,0 +1,12 @@
+[package]
+name = "graph-layout"
+description = "Graph layout algorithms run off the main thread (ADR-0009, ADR-0010)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

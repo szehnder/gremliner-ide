@@ -1,0 +1,28 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        Map(
+            {
+                Vertex {
+                    id: Int(
+                        3,
+                    ),
+                    label: "software",
+                }: Int64(
+                    1,
+                ),
+                Vertex {
+                    id: Int(
+                        5,
+                    ),
+                    label: "software",
+                }: Int64(
+                    1,
+                ),
+            },
+        ),
+    ],
+)

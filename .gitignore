@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+.DS_Store
+/testenv/data/*.graphml
+*.profraw
+/.env

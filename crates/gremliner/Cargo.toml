@@ -1,0 +1,21 @@
+[package]
+name = "gremliner"
+description = "Gremliner IDE desktop application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+gpui-kit.workspace = true
+ui-workspace.workspace = true
+graph-canvas.workspace = true
+graph-store.workspace = true
+clap.workspace = true
+env_logger.workspace = true
+log.workspace = true
+tokio.workspace = true
+storage.workspace = true
+
+[lints]
+workspace = true

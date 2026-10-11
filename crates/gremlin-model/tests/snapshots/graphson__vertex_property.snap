@@ -1,0 +1,20 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        VertexProperty(
+            VertexProperty {
+                id: Int64(
+                    0,
+                ),
+                label: "name",
+                value: String(
+                    "marko",
+                ),
+                properties: {},
+            },
+        ),
+    ],
+)

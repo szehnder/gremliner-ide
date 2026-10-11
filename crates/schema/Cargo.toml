@@ -1,0 +1,13 @@
+[package]
+name = "schema"
+description = "Schema discovery model and checks."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+gremlin-model.workspace = true
+
+[lints]
+workspace = true

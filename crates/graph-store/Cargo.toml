@@ -1,0 +1,13 @@
+[package]
+name = "graph-store"
+description = "Struct-of-arrays in-memory graph store for visualisation (ADR-0008)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+rayon.workspace = true
+
+[lints]
+workspace = true

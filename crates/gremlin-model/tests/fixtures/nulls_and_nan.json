@@ -1,0 +1,19 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:List",
+   "@value": [
+    null,
+    {
+     "@type": "g:Double",
+     "@value": "NaN"
+    },
+    {
+     "@type": "g:Double",
+     "@value": "Infinity"
+    }
+   ]
+  }
+ ]
+}

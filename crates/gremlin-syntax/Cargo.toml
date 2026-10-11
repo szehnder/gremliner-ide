@@ -1,0 +1,12 @@
+[package]
+name = "gremlin-syntax"
+description = "Gremlin language service: tree-sitter grammar, diagnostics, formatting, analysis."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

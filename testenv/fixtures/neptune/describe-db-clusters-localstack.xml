@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DescribeDBClustersResponse xmlns="http://rds.amazonaws.com/doc/2014-10-31/">
+  <DescribeDBClustersResult>
+    <DBClusters>
+      <DBCluster>
+        <DBClusterIdentifier>neptune-dev</DBClusterIdentifier>
+        <DBClusterArn>arn:aws:rds:us-east-1:000000000000:cluster:neptune-dev</DBClusterArn>
+        <Engine>neptune</Engine>
+        <EngineVersion>1.2.1.0</EngineVersion>
+        <Status>available</Status>
+        <Endpoint>localhost.localstack.cloud</Endpoint>
+        <ReaderEndpoint>localhost.localstack.cloud</ReaderEndpoint>
+        <Port>4510</Port>
+        <IAMDatabaseAuthenticationEnabled>false</IAMDatabaseAuthenticationEnabled>
+        <StorageEncrypted>false</StorageEncrypted>
+      </DBCluster>
+    </DBClusters>
+  </DescribeDBClustersResult>
+  <ResponseMetadata>
+    <RequestId>8f3e7c2a-0d4b-4e1f-9a57-2b6f1c0d9e11</RequestId>
+  </ResponseMetadata>
+</DescribeDBClustersResponse>

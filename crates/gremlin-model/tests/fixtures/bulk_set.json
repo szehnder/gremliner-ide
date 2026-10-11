@@ -1,0 +1,184 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:BulkSet",
+   "@value": [
+    {
+     "@type": "g:Vertex",
+     "@value": {
+      "id": {
+       "@type": "g:Int64",
+       "@value": 3
+      },
+      "label": "software",
+      "properties": {
+       "name": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 4
+          },
+          "value": "lop",
+          "label": "name"
+         }
+        }
+       ],
+       "lang": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 5
+          },
+          "value": "java",
+          "label": "lang"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 3
+    },
+    {
+     "@type": "g:Vertex",
+     "@value": {
+      "id": {
+       "@type": "g:Int64",
+       "@value": 2
+      },
+      "label": "person",
+      "properties": {
+       "name": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 2
+          },
+          "value": "vadas",
+          "label": "name"
+         }
+        }
+       ],
+       "age": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 3
+          },
+          "value": {
+           "@type": "g:Int32",
+           "@value": 27
+          },
+          "label": "age"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 1
+    },
+    {
+     "@type": "g:Vertex",
+     "@value": {
+      "id": {
+       "@type": "g:Int64",
+       "@value": 4
+      },
+      "label": "person",
+      "properties": {
+       "name": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 6
+          },
+          "value": "josh",
+          "label": "name"
+         }
+        }
+       ],
+       "age": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 7
+          },
+          "value": {
+           "@type": "g:Int32",
+           "@value": 32
+          },
+          "label": "age"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 1
+    },
+    {
+     "@type": "g:Vertex",
+     "@value": {
+      "id": {
+       "@type": "g:Int64",
+       "@value": 5
+      },
+      "label": "software",
+      "properties": {
+       "name": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 8
+          },
+          "value": "ripple",
+          "label": "name"
+         }
+        }
+       ],
+       "lang": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 9
+          },
+          "value": "java",
+          "label": "lang"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 1
+    }
+   ]
+  }
+ ]
+}

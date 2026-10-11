@@ -1,0 +1,95 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        TraversalMetrics(
+            Metrics {
+                id: None,
+                name: None,
+                dur_ms: 0.354677,
+                counts: {},
+                annotations: {},
+                metrics: [
+                    Metrics {
+                        id: Some(
+                            "0.0.0()",
+                        ),
+                        name: Some(
+                            "TinkerGraphStep(vertex,[])",
+                        ),
+                        dur_ms: 0.120286,
+                        counts: {
+                            "traverserCount": 6,
+                            "elementCount": 6,
+                        },
+                        annotations: {
+                            "percentDur": Double(
+                                33.9142374611266,
+                            ),
+                        },
+                        metrics: [],
+                    },
+                    Metrics {
+                        id: Some(
+                            "2.0.0()",
+                        ),
+                        name: Some(
+                            "VertexStep(OUT,vertex)",
+                        ),
+                        dur_ms: 0.099046,
+                        counts: {
+                            "traverserCount": 6,
+                            "elementCount": 6,
+                        },
+                        annotations: {
+                            "percentDur": Double(
+                                27.925690134967873,
+                            ),
+                        },
+                        metrics: [],
+                    },
+                    Metrics {
+                        id: Some(
+                            "4.0.0()",
+                        ),
+                        name: Some(
+                            "VertexStep(OUT,vertex)",
+                        ),
+                        dur_ms: 0.039122,
+                        counts: {
+                            "traverserCount": 2,
+                            "elementCount": 2,
+                        },
+                        annotations: {
+                            "percentDur": Double(
+                                11.03031772570536,
+                            ),
+                        },
+                        metrics: [],
+                    },
+                    Metrics {
+                        id: Some(
+                            "6.0.0()",
+                        ),
+                        name: Some(
+                            "PathStep",
+                        ),
+                        dur_ms: 0.096223,
+                        counts: {
+                            "traverserCount": 2,
+                            "elementCount": 2,
+                        },
+                        annotations: {
+                            "percentDur": Double(
+                                27.129754678200165,
+                            ),
+                        },
+                        metrics: [],
+                    },
+                ],
+            },
+        ),
+    ],
+)

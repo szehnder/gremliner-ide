@@ -1,0 +1,13 @@
+[package]
+name = "debugger"
+description = "Gremlin step-through debugger session logic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+gremlin-syntax.workspace = true
+
+[lints]
+workspace = true

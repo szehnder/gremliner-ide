@@ -1,0 +1,32 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        Edge(
+            Edge {
+                id: Int64(
+                    7,
+                ),
+                label: "knows",
+                out_v: Int64(
+                    1,
+                ),
+                out_v_label: "person",
+                in_v: Int64(
+                    2,
+                ),
+                in_v_label: "person",
+                properties: {
+                    "weight": Property {
+                        key: "weight",
+                        value: Double(
+                            0.5,
+                        ),
+                    },
+                },
+            },
+        ),
+    ],
+)

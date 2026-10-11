@@ -1,0 +1,40 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        Path(
+            Path {
+                labels: [
+                    [
+                        "a",
+                    ],
+                    [
+                        "b",
+                    ],
+                ],
+                objects: [
+                    Vertex(
+                        Vertex {
+                            id: Int64(
+                                1,
+                            ),
+                            label: "person",
+                            properties: {},
+                        },
+                    ),
+                    Vertex(
+                        Vertex {
+                            id: Int64(
+                                3,
+                            ),
+                            label: "software",
+                            properties: {},
+                        },
+                    ),
+                ],
+            },
+        ),
+    ],
+)

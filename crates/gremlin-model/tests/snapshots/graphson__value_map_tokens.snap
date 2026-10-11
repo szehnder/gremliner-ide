@@ -1,0 +1,40 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        Map(
+            {
+                T(
+                    Id,
+                ): Int64(
+                    1,
+                ),
+                T(
+                    Label,
+                ): String(
+                    "person",
+                ),
+                String(
+                    "name",
+                ): List(
+                    [
+                        String(
+                            "marko",
+                        ),
+                    ],
+                ),
+                String(
+                    "age",
+                ): List(
+                    [
+                        Int32(
+                            29,
+                        ),
+                    ],
+                ),
+            },
+        ),
+    ],
+)

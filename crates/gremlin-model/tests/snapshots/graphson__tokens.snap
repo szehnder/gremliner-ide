@@ -1,0 +1,30 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        List(
+            [
+                T(
+                    Id,
+                ),
+                Direction(
+                    Out,
+                ),
+                Token {
+                    kind: "Order",
+                    value: "desc",
+                },
+                Token {
+                    kind: "Scope",
+                    value: "local",
+                },
+                Token {
+                    kind: "Column",
+                    value: "keys",
+                },
+            ],
+        ),
+    ],
+)

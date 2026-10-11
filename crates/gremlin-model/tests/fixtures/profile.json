@@ -1,0 +1,200 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:TraversalMetrics",
+   "@value": {
+    "@type": "g:Map",
+    "@value": [
+     "dur",
+     {
+      "@type": "g:Double",
+      "@value": 0.354677
+     },
+     "metrics",
+     {
+      "@type": "g:List",
+      "@value": [
+       {
+        "@type": "g:Metrics",
+        "@value": {
+         "@type": "g:Map",
+         "@value": [
+          "dur",
+          {
+           "@type": "g:Double",
+           "@value": 0.120286
+          },
+          "counts",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "traverserCount",
+            {
+             "@type": "g:Int64",
+             "@value": 6
+            },
+            "elementCount",
+            {
+             "@type": "g:Int64",
+             "@value": 6
+            }
+           ]
+          },
+          "name",
+          "TinkerGraphStep(vertex,[])",
+          "annotations",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "percentDur",
+            {
+             "@type": "g:Double",
+             "@value": 33.9142374611266
+            }
+           ]
+          },
+          "id",
+          "0.0.0()"
+         ]
+        }
+       },
+       {
+        "@type": "g:Metrics",
+        "@value": {
+         "@type": "g:Map",
+         "@value": [
+          "dur",
+          {
+           "@type": "g:Double",
+           "@value": 0.099046
+          },
+          "counts",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "traverserCount",
+            {
+             "@type": "g:Int64",
+             "@value": 6
+            },
+            "elementCount",
+            {
+             "@type": "g:Int64",
+             "@value": 6
+            }
+           ]
+          },
+          "name",
+          "VertexStep(OUT,vertex)",
+          "annotations",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "percentDur",
+            {
+             "@type": "g:Double",
+             "@value": 27.925690134967873
+            }
+           ]
+          },
+          "id",
+          "2.0.0()"
+         ]
+        }
+       },
+       {
+        "@type": "g:Metrics",
+        "@value": {
+         "@type": "g:Map",
+         "@value": [
+          "dur",
+          {
+           "@type": "g:Double",
+           "@value": 0.039122
+          },
+          "counts",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "traverserCount",
+            {
+             "@type": "g:Int64",
+             "@value": 2
+            },
+            "elementCount",
+            {
+             "@type": "g:Int64",
+             "@value": 2
+            }
+           ]
+          },
+          "name",
+          "VertexStep(OUT,vertex)",
+          "annotations",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "percentDur",
+            {
+             "@type": "g:Double",
+             "@value": 11.03031772570536
+            }
+           ]
+          },
+          "id",
+          "4.0.0()"
+         ]
+        }
+       },
+       {
+        "@type": "g:Metrics",
+        "@value": {
+         "@type": "g:Map",
+         "@value": [
+          "dur",
+          {
+           "@type": "g:Double",
+           "@value": 0.096223
+          },
+          "counts",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "traverserCount",
+            {
+             "@type": "g:Int64",
+             "@value": 2
+            },
+            "elementCount",
+            {
+             "@type": "g:Int64",
+             "@value": 2
+            }
+           ]
+          },
+          "name",
+          "PathStep",
+          "annotations",
+          {
+           "@type": "g:Map",
+           "@value": [
+            "percentDur",
+            {
+             "@type": "g:Double",
+             "@value": 27.129754678200165
+            }
+           ]
+          },
+          "id",
+          "6.0.0()"
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

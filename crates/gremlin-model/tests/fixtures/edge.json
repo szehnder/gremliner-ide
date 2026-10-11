@@ -1,0 +1,37 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:Edge",
+   "@value": {
+    "id": {
+     "@type": "g:Int64",
+     "@value": 7
+    },
+    "label": "knows",
+    "inVLabel": "person",
+    "outVLabel": "person",
+    "inV": {
+     "@type": "g:Int64",
+     "@value": 2
+    },
+    "outV": {
+     "@type": "g:Int64",
+     "@value": 1
+    },
+    "properties": {
+     "weight": {
+      "@type": "g:Property",
+      "@value": {
+       "key": "weight",
+       "value": {
+        "@type": "g:Double",
+        "@value": 0.5
+       }
+      }
+     }
+    }
+   }
+  }
+ ]
+}

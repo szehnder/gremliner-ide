@@ -1,0 +1,72 @@
+# Performance budgets (ADR-0027). Absolute values apply on the reference machine; CI checks relative
+# regressions (>15%) against perf-baseline.json. `change` names the OpenSpec change that adds the measurement.
+
+[[budget]]
+name = "cold_start_first_frame"
+metric = "median"
+max = 300
+unit = "ms"
+change = "performance-budgets"
+
+[[budget]]
+name = "idle_rss"
+metric = "max"
+max = 150
+unit = "MB"
+change = "performance-budgets"
+
+[[budget]]
+name = "keystroke_to_diagnostics"
+metric = "p95"
+max = 8
+unit = "ms"
+change = "gremlin-language"
+
+[[budget]]
+name = "completion_latency"
+metric = "p95"
+max = 30
+unit = "ms"
+change = "autocomplete"
+
+[[budget]]
+name = "graphson_decode_10mb"
+metric = "median"
+max = 60
+unit = "ms"
+change = "gremlin-client"
+
+[[budget]]
+name = "canvas_frame_10k_20k"
+metric = "p95"
+max = 8.3
+unit = "ms"
+change = "graph-canvas-spike"
+
+[[budget]]
+name = "canvas_frame_50k_100k"
+metric = "p95"
+max = 16.7
+unit = "ms"
+change = "graph-canvas-spike"
+
+[[budget]]
+name = "fa2_air_routes_converge"
+metric = "median"
+max = 2000
+unit = "ms"
+change = "graph-layouts"
+
+[[budget]]
+name = "table_scroll_100k_frame"
+metric = "max"
+max = 16
+unit = "ms"
+change = "query-execution"
+
+[[budget]]
+name = "editor_typing_10k_lines"
+metric = "p95"
+max = 16
+unit = "ms"
+change = "query-editor"

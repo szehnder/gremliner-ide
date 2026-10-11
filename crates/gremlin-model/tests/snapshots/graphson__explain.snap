@@ -1,0 +1,346 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        Unknown {
+            type_name: "g:TraversalExplanation",
+            value: Object {
+                "@type": String("g:Map"),
+                "@value": Array [
+                    String("original"),
+                    Object {
+                        "@type": String("g:List"),
+                        "@value": Array [
+                            String("GraphStep(vertex,[])"),
+                            String("VertexStep(OUT,vertex)"),
+                            String("CountGlobalStep"),
+                        ],
+                    },
+                    String("intermediate"),
+                    Object {
+                        "@type": String("g:List"),
+                        "@value": Array [
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("ConnectiveStrategy"),
+                                    String("category"),
+                                    String("DecorationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("CountStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("IdentityRemovalStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("ByModulatorOptimizationStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("MatchPredicateStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("FilterRankingStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("InlineFilterStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,vertex)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("IncidentToAdjacentStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("AdjacentToIncidentStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("EarlyLimitStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("RepeatUnrollStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("PathRetractionStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("LazyBarrierStrategy"),
+                                    String("category"),
+                                    String("OptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("GraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("TinkerGraphCountStrategy"),
+                                    String("category"),
+                                    String("ProviderOptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("TinkerGraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("TinkerGraphStepStrategy"),
+                                    String("category"),
+                                    String("ProviderOptimizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("TinkerGraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("ProfileStrategy"),
+                                    String("category"),
+                                    String("FinalizationStrategy"),
+                                ],
+                            },
+                            Object {
+                                "@type": String("g:Map"),
+                                "@value": Array [
+                                    String("traversal"),
+                                    Object {
+                                        "@type": String("g:List"),
+                                        "@value": Array [
+                                            String("TinkerGraphStep(vertex,[])"),
+                                            String("VertexStep(OUT,edge)"),
+                                            String("CountGlobalStep"),
+                                        ],
+                                    },
+                                    String("strategy"),
+                                    String("StandardVerificationStrategy"),
+                                    String("category"),
+                                    String("VerificationStrategy"),
+                                ],
+                            },
+                        ],
+                    },
+                    String("final"),
+                    Object {
+                        "@type": String("g:List"),
+                        "@value": Array [
+                            String("TinkerGraphStep(vertex,[])"),
+                            String("VertexStep(OUT,edge)"),
+                            String("CountGlobalStep"),
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
+)

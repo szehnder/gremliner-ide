@@ -1,0 +1,15 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:Property",
+   "@value": {
+    "key": "weight",
+    "value": {
+     "@type": "g:Double",
+     "@value": 0.5
+    }
+   }
+  }
+ ]
+}

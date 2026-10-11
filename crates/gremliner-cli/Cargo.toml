@@ -1,0 +1,34 @@
+[package]
+name = "gremliner-cli"
+description = "Headless Gremliner CLI: the agent verification surface (ADR-0024)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "gremliner-cli"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+serde_json.workspace = true
+futures.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+gremlin-model.workspace = true
+gremlin-syntax.workspace = true
+gremlin-client.workspace = true
+providers.workspace = true
+schema.workspace = true
+llm.workspace = true
+assistant.workspace = true
+storage.workspace = true
+graph-store.workspace = true
+graph-layout.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

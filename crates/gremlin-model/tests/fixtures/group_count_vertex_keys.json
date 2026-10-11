@@ -1,0 +1,94 @@
+{
+ "@type": "g:List",
+ "@value": [
+  {
+   "@type": "g:Map",
+   "@value": [
+    {
+     "@type": "g:Vertex",
+     "@value": {
+      "id": {
+       "@type": "g:Int64",
+       "@value": 3
+      },
+      "label": "software",
+      "properties": {
+       "name": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 4
+          },
+          "value": "lop",
+          "label": "name"
+         }
+        }
+       ],
+       "lang": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 5
+          },
+          "value": "java",
+          "label": "lang"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 1
+    },
+    {
+     "@type": "g:Vertex",
+     "@value": {
+      "id": {
+       "@type": "g:Int64",
+       "@value": 5
+      },
+      "label": "software",
+      "properties": {
+       "name": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 8
+          },
+          "value": "ripple",
+          "label": "name"
+         }
+        }
+       ],
+       "lang": [
+        {
+         "@type": "g:VertexProperty",
+         "@value": {
+          "id": {
+           "@type": "g:Int64",
+           "@value": 9
+          },
+          "value": "java",
+          "label": "lang"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "@type": "g:Int64",
+     "@value": 1
+    }
+   ]
+  }
+ ]
+}

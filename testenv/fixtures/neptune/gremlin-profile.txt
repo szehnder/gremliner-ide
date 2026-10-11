@@ -1,0 +1,68 @@
+*******************************************************
+                Neptune Gremlin Profile
+*******************************************************
+
+Query String
+==================
+g.V().has('airport','code','AUS').out('route').values('code')
+
+Original Traversal
+==================
+[GraphStep(vertex,[]), HasStep([~label.eq(airport), code.eq(AUS)]), VertexStep(OUT,[route],vertex), PropertiesStep([code],value)]
+
+Optimized Traversal
+===================
+Neptune steps:
+[
+    NeptuneGraphQueryStep(PropertyValue) {
+        JoinGroupNode {
+            PatternNode[(?1, <code>, "AUS", ?) . project ?1 .], {estimatedCardinality=1, indexTime=0, joinTime=0, numSearches=1, actualTotalOutput=1}
+            PatternNode[(?1, <~label>, ?2=<airport>, <~>) . project ask .], {estimatedCardinality=3504, indexTime=0, joinTime=0, numSearches=1}
+            PatternNode[(?1, ?5=<route>, ?3, ?6) . project ?1,?3 .], {estimatedCardinality=50637, indexTime=0, joinTime=0, numSearches=1, actualTotalOutput=59}
+            PatternNode[(?3, <code>, ?7, ?) . project ?3,?7 .], {estimatedCardinality=3749, indexTime=0, joinTime=0, numSearches=59, actualTotalOutput=59}
+        }, annotations={path=[Vertex(?1):GraphStep, Vertex(?3):VertexStep, PropertyValue(?7):PropertiesStep], maxVarId=8}
+    },
+    NeptuneTraverserConverterStep
+]
+
+Physical Pipeline
+=================
+NeptuneGraphQueryStep
+    |-- StartOp
+    |-- JoinGroupOp
+        |-- SpoolerOp(1000)
+        |-- DynamicJoinOp(PatternNode[(?1, <code>, "AUS", ?) . project ?1 .], {estimatedCardinality=1})
+        |-- SpoolerOp(1000)
+        |-- DynamicJoinOp(PatternNode[(?1, ?5=<route>, ?3, ?6) . project ?1,?3 .], {estimatedCardinality=50637})
+        |-- SpoolerOp(1000)
+        |-- DynamicJoinOp(PatternNode[(?3, <code>, ?7, ?) . project ?3,?7 .], {estimatedCardinality=3749})
+
+Runtime (ms)
+============
+Query Execution:  3.412
+Serialization:    0.874
+
+Traversal Metrics
+=================
+Step                                                               Count  Traversers       Time (ms)    % Dur
+-------------------------------------------------------------------------------------------------------------
+NeptuneGraphQueryStep(PropertyValue)                                  59          59           2.904    85.11
+NeptuneTraverserConverterStep                                         59          59           0.508    14.89
+                                            >TOTAL                     -           -           3.412        -
+
+Predicates
+==========
+# of predicates: 18
+
+Results
+=======
+Count: 59
+Output: [MCO, LAX, ORD, ...]
+
+Index Operations
+================
+Query execution:
+    # of statement index ops: 63
+    # of unique statement index ops: 63
+    Duplication ratio: 1.0
+    # of terms materialized: 0

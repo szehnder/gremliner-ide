@@ -1,0 +1,160 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        BulkSet(
+            [
+                (
+                    Vertex(
+                        Vertex {
+                            id: Int64(
+                                3,
+                            ),
+                            label: "software",
+                            properties: {
+                                "name": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            4,
+                                        ),
+                                        label: "name",
+                                        value: String(
+                                            "lop",
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                                "lang": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            5,
+                                        ),
+                                        label: "lang",
+                                        value: String(
+                                            "java",
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                            },
+                        },
+                    ),
+                    3,
+                ),
+                (
+                    Vertex(
+                        Vertex {
+                            id: Int64(
+                                2,
+                            ),
+                            label: "person",
+                            properties: {
+                                "name": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            2,
+                                        ),
+                                        label: "name",
+                                        value: String(
+                                            "vadas",
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                                "age": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            3,
+                                        ),
+                                        label: "age",
+                                        value: Int32(
+                                            27,
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                            },
+                        },
+                    ),
+                    1,
+                ),
+                (
+                    Vertex(
+                        Vertex {
+                            id: Int64(
+                                4,
+                            ),
+                            label: "person",
+                            properties: {
+                                "name": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            6,
+                                        ),
+                                        label: "name",
+                                        value: String(
+                                            "josh",
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                                "age": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            7,
+                                        ),
+                                        label: "age",
+                                        value: Int32(
+                                            32,
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                            },
+                        },
+                    ),
+                    1,
+                ),
+                (
+                    Vertex(
+                        Vertex {
+                            id: Int64(
+                                5,
+                            ),
+                            label: "software",
+                            properties: {
+                                "name": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            8,
+                                        ),
+                                        label: "name",
+                                        value: String(
+                                            "ripple",
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                                "lang": [
+                                    VertexProperty {
+                                        id: Int64(
+                                            9,
+                                        ),
+                                        label: "lang",
+                                        value: String(
+                                            "java",
+                                        ),
+                                        properties: {},
+                                    },
+                                ],
+                            },
+                        },
+                    ),
+                    1,
+                ),
+            ],
+        ),
+    ],
+)

@@ -1,0 +1,104 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+repository = "https://github.com/seanzehnder/gremliner-ide"
+
+[workspace.dependencies]
+# Internal crates (see docs/adr/0004 for layering rules)
+gremlin-model = { path = "crates/gremlin-model" }
+gremlin-syntax = { path = "crates/gremlin-syntax" }
+gremlin-client = { path = "crates/gremlin-client" }
+graph-store = { path = "crates/graph-store" }
+graph-layout = { path = "crates/graph-layout" }
+graph-canvas = { path = "crates/graph-canvas" }
+providers = { path = "crates/providers" }
+schema = { path = "crates/schema" }
+llm = { path = "crates/llm" }
+assistant = { path = "crates/assistant" }
+debugger = { path = "crates/debugger" }
+storage = { path = "crates/storage" }
+ui-workspace = { path = "crates/ui-workspace" }
+ui-editor = { path = "crates/ui-editor" }
+ui-results = { path = "crates/ui-results" }
+ui-assistant = { path = "crates/ui-assistant" }
+
+# UI
+gpui-kit = { version = "0.7.1", default-features = false, features = ["component", "assets"] }
+
+# Async / runtime
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+base64 = "0.22"
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+
+# Data
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+indexmap = { version = "2", features = ["serde"] }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rayon = "1"
+smallvec = "1"
+
+# Parsing
+tree-sitter = "0.25"
+
+# Storage
+rusqlite = { version = "0.37", features = ["bundled"] }
+keyring = { version = "3", features = ["linux-native-sync-persistent", "apple-native", "windows-native", "crypto-rust"] }
+directories = "6"
+
+# AWS
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-credential-types = "1"
+aws-sigv4 = "1"
+aws-smithy-runtime-api = "1"
+http = "1"
+
+# CLI / dev
+clap = { version = "4", features = ["derive", "env"] }
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+log = "0.4"
+toml = "0.9"
+ureq = { version = "3", features = ["json"] }
+sha2 = "0.10"
+insta = { version = "1", features = ["json", "yaml"] }
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+simd-json = { version = "0.17", default-features = false, features = ["serde_impl", "swar-number-parsing", "runtime-detection"] }
+rustc-hash = "2"
+nucleo-matcher = "0.3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unwrap_used = "warn"
+type_complexity = "allow"
+too_many_arguments = "allow"
+
+[profile.dev]
+# GPUI is very slow unoptimized; optimize deps, keep our crates debuggable.
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
+
+[profile.bench]
+inherits = "release"

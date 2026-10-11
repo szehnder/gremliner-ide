@@ -1,0 +1,32 @@
+# Gremlin Server for Gremliner tests: four TinkerGraphs bound to traversal sources
+#   g        -> air-routes (seeded by `cargo xtask testenv seed`)
+#   gModern  -> TinkerPop "modern" (loaded at startup)
+#   gCrew    -> TinkerPop "crew" (multi/meta-properties, loaded at startup)
+#   gSynth   -> synthetic graph for performance tests and mutation tests
+host: 0.0.0.0
+port: 8182
+evaluationTimeout: 30000
+channelizer: org.apache.tinkerpop.gremlin.server.channel.WsAndHttpChannelizer
+graphs: {
+  graph: conf/tinkergraph-long.properties,
+  modern: conf/tinkergraph-modern.properties,
+  crew: conf/tinkergraph-crew.properties,
+  synth: conf/tinkergraph-long.properties}
+scriptEngines: {
+  gremlin-groovy: {
+    plugins: { org.apache.tinkerpop.gremlin.server.jsr223.GremlinServerGremlinPlugin: {},
+               org.apache.tinkerpop.gremlin.tinkergraph.jsr223.TinkerGraphGremlinPlugin: {},
+               org.apache.tinkerpop.gremlin.jsr223.ImportGremlinPlugin: {classImports: [java.lang.Math], methodImports: [java.lang.Math#*]},
+               org.apache.tinkerpop.gremlin.jsr223.ScriptFileGremlinPlugin: {files: [scripts/gremliner-init.groovy]}}}}
+serializers:
+  - { className: org.apache.tinkerpop.gremlin.util.ser.GraphSONMessageSerializerV3, config: { ioRegistries: [org.apache.tinkerpop.gremlin.tinkergraph.structure.TinkerIoRegistryV3] }}
+  - { className: org.apache.tinkerpop.gremlin.util.ser.GraphBinaryMessageSerializerV1 }
+processors:
+  - { className: org.apache.tinkerpop.gremlin.server.op.session.SessionOpProcessor, config: { sessionTimeout: 28800000 }}
+  - { className: org.apache.tinkerpop.gremlin.server.op.traversal.TraversalOpProcessor}
+strictTransactionManagement: false
+idleConnectionTimeout: 0
+keepAliveInterval: 0
+maxContentLength: 104857600
+resultIterationBatchSize: 64
+ssl: { enabled: false }

@@ -1,0 +1,34 @@
+# Gremliner test environment (ADR-0026). Managed via `cargo xtask testenv up|seed|status|reset|down`.
+# The image's entrypoint rewrites the config in place, so configs are mounted under /gremliner,
+# copied into the server directory, and the server is started directly (keeping host 0.0.0.0).
+name: gremliner-testenv
+
+x-gremlin: &gremlin
+  image: tinkerpop/gremlin-server:3.7.3
+  entrypoint: ["/bin/sh", "-c", "cp /gremliner/conf/* conf/ && cp /gremliner/scripts/* scripts/ && exec bin/gremlin-server.sh conf/$$CONF"]
+  volumes:
+    - ./conf:/gremliner/conf:ro
+    - ./scripts:/gremliner/scripts:ro
+    - ./data:/data:ro
+  healthcheck:
+    test: ["CMD-SHELL", "wget -q -O- 'http://127.0.0.1:8182/gremlin?gremlin=1' >/dev/null 2>&1 || exit 1"]
+    interval: 2s
+    timeout: 3s
+    retries: 45
+
+services:
+  gremlin:
+    <<: *gremlin
+    environment: { CONF: gremliner.yaml }
+    ports: ["8182:8182"]
+
+  gremlin-auth:
+    <<: *gremlin
+    environment: { CONF: gremliner-auth.yaml }
+    ports: ["8183:8182"]
+    # SASL auth is WebSocket-only, so health is a TCP port check.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8182"]
+      interval: 2s
+      timeout: 3s
+      retries: 45

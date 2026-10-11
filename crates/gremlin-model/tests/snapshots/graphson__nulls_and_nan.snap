@@ -1,0 +1,19 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        List(
+            [
+                Null,
+                Double(
+                    NaN,
+                ),
+                Double(
+                    inf,
+                ),
+            ],
+        ),
+    ],
+)

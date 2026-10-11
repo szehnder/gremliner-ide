@@ -1,0 +1,34 @@
+schema: spec-driven
+
+context: |
+  Gremliner is a native desktop Gremlin IDE written entirely in Rust (GPUI via gpui-kit for UI, tokio for I/O).
+  Architectural decisions live in docs/adr/ (one decision per file). design.md files MUST cite the ADRs they rely
+  on instead of restating them, and MUST add a new ADR when they make a new architectural decision.
+  Crate layering (ADR-0004): core crates (no UI, no tokio) <- I/O crates (tokio) <- UI crates (gpui-kit). Never invert.
+  Changes are implemented in the order listed in openspec/ROADMAP.md.
+  Targets Linux (primary dev), macOS and Windows. Test environment is TinkerPop gremlin-server in Docker
+  (no LocalStack Pro available); Neptune specifics are covered by recorded fixtures.
+  Performance budgets are in perf-budgets.toml (ADR-0027) and are acceptance criteria, not aspirations.
+
+rules:
+  proposal:
+    - State explicitly what is out of scope.
+    - List the ADRs the change depends on under Impact.
+  specs:
+    - Scenarios must be verifiable by an automated test or by gremliner-cli output; name the test scenario_<capability>_<slug>.
+    - Do not name crates, structs or libraries in specs; behaviour only.
+  design:
+    - Cite ADR numbers for every decision already recorded; propose a new ADR file for any new architectural decision.
+    - Include a "Verification" section listing the commands an agent runs to prove the change works.
+  tasks:
+    - Every task states its verification (test name, command, or observable result).
+    - The last group is always "Verification" and includes `cargo xtask ci` passing and `openspec validate <change> --strict`.
+
+operations:
+  apply:
+    guidance:
+      - Work task-by-task; tick the checkbox only after its verification passes.
+      - Prefer adding a gremliner-cli subcommand or test over manual GUI checking; use `cargo xtask screenshot` for visual checks.
+  archive:
+    guidance:
+      - Archive only when `cargo xtask ci` is green and every scenario has a mapped test (`cargo xtask spec-coverage`).

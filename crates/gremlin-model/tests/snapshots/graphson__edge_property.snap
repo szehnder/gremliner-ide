@@ -1,0 +1,16 @@
+---
+source: crates/gremlin-model/tests/graphson.rs
+expression: fixture(name)
+---
+List(
+    [
+        Property(
+            Property {
+                key: "weight",
+                value: Double(
+                    0.5,
+                ),
+            },
+        ),
+    ],
+)

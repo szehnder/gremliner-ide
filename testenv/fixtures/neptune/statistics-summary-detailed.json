@@ -1,0 +1,38 @@
+{
+  "status": "200 OK",
+  "payload": {
+    "version": "v1",
+    "lastStatisticsComputationTime": "2026-09-09T14:10:52.000Z",
+    "graphSummary": {
+      "numNodes": 3749,
+      "numEdges": 57645,
+      "numNodeLabels": 4,
+      "numEdgeLabels": 2,
+      "nodeLabels": ["airport", "country", "continent", "version"],
+      "edgeLabels": ["route", "contains"],
+      "numNodeProperties": 18,
+      "numEdgeProperties": 1,
+      "nodeProperties": [
+        { "code": 3749 }, { "desc": 3749 }, { "type": 3749 }, { "icao": 3504 }, { "city": 3504 },
+        { "country": 3504 }, { "region": 3504 }, { "runways": 3504 }, { "longest": 3504 }, { "elev": 3504 },
+        { "lat": 3504 }, { "lon": 3504 }, { "author": 1 }, { "date": 1 }
+      ],
+      "edgeProperties": [ { "dist": 50637 } ],
+      "totalNodePropertyValues": 45620,
+      "totalEdgePropertyValues": 50637,
+      "nodeStructures": [
+        {
+          "count": 3504,
+          "nodeProperties": ["code", "desc", "type", "icao", "city", "country", "region", "runways", "longest", "elev", "lat", "lon"],
+          "distinctOutgoingEdgeLabels": ["route"]
+        },
+        { "count": 237, "nodeProperties": ["code", "desc", "type"], "distinctOutgoingEdgeLabels": ["contains"] },
+        { "count": 7, "nodeProperties": ["code", "desc", "type"], "distinctOutgoingEdgeLabels": ["contains"] }
+      ],
+      "edgeStructures": [
+        { "count": 50637, "edgeProperties": ["dist"] },
+        { "count": 7008, "edgeProperties": [] }
+      ]
+    }
+  }
+}

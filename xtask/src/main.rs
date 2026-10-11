@@ -1,0 +1,197 @@
+//! Project automation: `cargo xtask <command>`. See AGENTS.md.
+
+mod layering;
+mod screenshot;
+mod spec_coverage;
+mod testenv;
+mod tokens;
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use anyhow::{Context, Result, bail};
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(name = "xtask", about = "Gremliner project automation")]
+struct Cli {
+    #[command(subcommand)]
+    command: Cmd,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Everything CI runs: fmt, clippy, layering, tokens, tests, openspec validate.
+    Ci {
+        /// Skip `cargo test` (useful for quick pre-commit checks).
+        #[arg(long)]
+        no_test: bool,
+    },
+    /// Check crate layering rules (ADR-0004).
+    Layering,
+    /// Check UI code uses design tokens instead of raw colours/sizes (ADR-0023).
+    Tokens,
+    /// Report OpenSpec scenarios without a matching `scenario_<capability>_<slug>` test (ADR-0025).
+    SpecCoverage {
+        /// Fail if any scenario in an archived (main) spec is unmapped.
+        #[arg(long)]
+        enforce: bool,
+    },
+    /// Docker test environment (ADR-0026).
+    Testenv {
+        #[command(subcommand)]
+        cmd: testenv::TestenvCmd,
+    },
+    /// Performance budgets (ADR-0027).
+    Bench {
+        /// List the budgets defined in perf-budgets.toml.
+        #[arg(long)]
+        list: bool,
+        /// Check measurements against budgets (implemented by `performance-budgets`).
+        #[arg(long)]
+        check: bool,
+    },
+    /// Launch the release app on a fresh data dir and capture its window to a PNG.
+    Screenshot {
+        /// Seconds to wait before capturing.
+        #[arg(long, default_value_t = 3.0)]
+        delay: f32,
+        /// Output file (default: target/screenshots/gremliner-<time>.png).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Use the normal data directory instead of a fresh one.
+        #[arg(long)]
+        keep_data: bool,
+        /// Arguments for the app, after `--`.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
+}
+
+fn main() -> Result<()> {
+    let root = workspace_root();
+    std::env::set_current_dir(&root)?;
+    match Cli::parse().command {
+        Cmd::Ci { no_test } => ci(&root, no_test),
+        Cmd::Layering => layering::check(&root),
+        Cmd::Tokens => tokens::check(&root),
+        Cmd::SpecCoverage { enforce } => spec_coverage::run(&root, enforce),
+        Cmd::Testenv { cmd } => testenv::run(&root, cmd),
+        Cmd::Bench { list, check } => bench(&root, list, check),
+        Cmd::Screenshot {
+            delay,
+            out,
+            keep_data,
+            args,
+        } => screenshot::run(
+            &root,
+            screenshot::Options {
+                delay,
+                out,
+                keep_data,
+                app_args: args,
+            },
+        ),
+    }
+}
+
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask lives in the workspace root")
+        .to_path_buf()
+}
+
+fn not_yet(what: &str, change: &str) -> Result<()> {
+    bail!("`cargo xtask {what}` is not implemented yet; see openspec/changes/{change}")
+}
+
+pub(crate) fn run(step: &str, cmd: &mut Command) -> Result<()> {
+    eprintln!("\n==> {step}");
+    let status = cmd
+        .status()
+        .with_context(|| format!("failed to spawn: {step}"))?;
+    if !status.success() {
+        bail!("step failed: {step}");
+    }
+    Ok(())
+}
+
+fn ci(root: &Path, no_test: bool) -> Result<()> {
+    run(
+        "cargo fmt --check",
+        Command::new("cargo").args(["fmt", "--all", "--check"]),
+    )?;
+    run(
+        "cargo clippy",
+        Command::new("cargo").args([
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ]),
+    )?;
+    eprintln!("\n==> layering");
+    layering::check(root)?;
+    eprintln!("\n==> design tokens");
+    tokens::check(root)?;
+    if !no_test {
+        run(
+            "cargo test",
+            Command::new("cargo").args(["test", "--workspace"]),
+        )?;
+    }
+    if which("openspec") {
+        run(
+            "openspec validate",
+            Command::new("openspec").args(["validate", "--all", "--strict", "--no-interactive"]),
+        )?;
+    } else {
+        eprintln!(
+            "\n==> openspec validate: skipped (openspec CLI not on PATH; `npm i -g @fission-ai/openspec`)"
+        );
+    }
+    eprintln!("\n==> spec coverage (report)");
+    spec_coverage::run(root, false)?;
+    eprintln!("\nCI passed.");
+    Ok(())
+}
+
+fn which(bin: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|p| p.join(bin).is_file()))
+        .unwrap_or(false)
+}
+
+#[derive(serde::Deserialize)]
+struct Budgets {
+    budget: Vec<Budget>,
+}
+
+#[derive(serde::Deserialize)]
+struct Budget {
+    name: String,
+    metric: String,
+    max: f64,
+    unit: String,
+    change: String,
+}
+
+fn bench(root: &Path, list: bool, check: bool) -> Result<()> {
+    let text = std::fs::read_to_string(root.join("perf-budgets.toml"))?;
+    let budgets: Budgets = toml::from_str(&text).context("parsing perf-budgets.toml")?;
+    if list || !check {
+        for b in &budgets.budget {
+            println!(
+                "{:<28} {:<10} <= {:>8} {:<6} ({})",
+                b.name, b.metric, b.max, b.unit, b.change
+            );
+        }
+    }
+    if check {
+        return not_yet("bench --check", "performance-budgets");
+    }
+    Ok(())
+}

@@ -1,0 +1,17 @@
+[package]
+name = "assistant"
+description = "Schema-grounded NL-to-Gremlin pipeline and assistant modes (ADR-0019)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+llm.workspace = true
+schema.workspace = true
+gremlin-syntax.workspace = true
+providers.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

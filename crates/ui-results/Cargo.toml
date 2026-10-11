@@ -1,0 +1,15 @@
+[package]
+name = "ui-results"
+description = "Results views: table, JSON, console, graph, profile."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+gremlin-model.workspace = true
+graph-canvas.workspace = true
+gpui-kit.workspace = true
+
+[lints]
+workspace = true
