@@ -15,6 +15,7 @@ use crate::theme::{MAX_FONT_SIZE, MIN_FONT_SIZE, ThemeChoice};
 
 pub struct SettingsPanel {
     focus_handle: FocusHandle,
+    ai: Entity<crate::ai::page::AiSettingsView>,
 }
 
 panel_basics!(SettingsPanel);
@@ -26,6 +27,7 @@ impl WorkspacePanel for SettingsPanel {
     fn build(_: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
             focus_handle: cx.focus_handle(),
+            ai: cx.new(crate::ai::page::AiSettingsView::new),
         })
     }
 }
@@ -169,6 +171,23 @@ fn general_page() -> SettingPage {
         )
 }
 
+fn ai_page(view: Entity<crate::ai::page::AiSettingsView>) -> SettingPage {
+    SettingPage::new("AI")
+        .icon(IconName::Bot)
+        .resettable(false)
+        .description("Models for the assistant and what it may see.")
+        .group(SettingGroup::new().title("Profiles").item(
+            SettingItem::render(move |_, _, _| view.clone()).keywords([
+                "llm",
+                "model",
+                "anthropic",
+                "openai",
+                "ollama",
+                "gemini",
+            ]),
+        ))
+}
+
 impl Render for SettingsPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         div()
@@ -177,6 +196,10 @@ impl Render for SettingsPanel {
             .track_focus(&self.focus_handle)
             .size_full()
             .bg(cx.theme().background)
-            .child(Settings::new("settings").page(general_page()))
+            .child(
+                Settings::new("settings")
+                    .page(general_page())
+                    .page(ai_page(self.ai.clone())),
+            )
     }
 }

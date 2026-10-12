@@ -4,6 +4,7 @@
 //! add panels with [`panels::register`] and commands with [`palette::CommandRegistry::register`].
 
 pub mod actions;
+pub mod ai;
 pub mod assets;
 pub mod connections;
 pub mod io;
@@ -72,8 +73,13 @@ pub fn init(config: ShellConfig, cx: &mut App) {
             .inspect_err(|err| log::error!("in-memory database unavailable: {err}"))
             .ok(),
     };
+    // One credential store for connection passwords and LLM keys.
+    let secrets = config
+        .secrets
+        .unwrap_or_else(|| std::sync::Arc::new(storage::secrets::LazyStore::default()));
     if let Some(db) = connection_db {
-        connections::ConnectionManager::init(db, config.secrets, cx);
+        ai::LlmProfiles::init(db.clone(), secrets.clone(), cx);
+        connections::ConnectionManager::init(db, Some(secrets), cx);
     }
     schema::SchemaRegistry::init(cx);
     AppSettings::init(general, config.storage, cx);

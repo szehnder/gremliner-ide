@@ -1,0 +1,6 @@
+data: {"choices":[{"index":0,"delta":{"content":"{\"query\": \"g.V()"}}]}
+
+data: {"choices":[{"index":0,"delta":{"content":".count()\", \"intent\": \"read\"}"},"finish_reason":"stop"}]}
+
+data: [DONE]
+

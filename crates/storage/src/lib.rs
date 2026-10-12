@@ -6,12 +6,14 @@
 //! `*_blocking` variants exist only for startup, before the first frame, and for tests.
 
 mod connections;
+mod llm_profiles;
 mod migrations;
 mod schema_cache;
 pub mod secrets;
 mod stylesheets;
 mod tabs;
 
+pub use llm_profiles::LlmProfileRow;
 pub use schema_cache::CachedSchema;
 pub use stylesheets::StylesheetRow;
 
@@ -264,6 +266,21 @@ impl Storage {
         key: &str,
     ) -> Result<Option<T>> {
         decode(key, self.get_blocking(table, key)?)
+    }
+
+    /// Blocking variant of [`Self::set_json`].
+    pub fn set_json_blocking<T: Serialize>(
+        &self,
+        table: Table,
+        key: &str,
+        value: &T,
+    ) -> Result<()> {
+        let json = serde_json::to_string(value).map_err(|source| StorageError::Json {
+            key: key.to_owned(),
+            source,
+        })?;
+        let key = key.to_owned();
+        self.call_blocking(move |conn| set_raw(conn, table, &key, &json))
     }
 
     /// Serialize and write a value.

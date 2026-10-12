@@ -1,0 +1,12 @@
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hello! Graph"},"finish_reason":null}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" databases model"},"finish_reason":null}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":" networks."},"finish_reason":"stop"}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":20,"completion_tokens":9,"total_tokens":29}}
+
+data: [DONE]
+

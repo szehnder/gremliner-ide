@@ -1,0 +1,2 @@
+data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"get_schema","args":{"label":"airport"}}}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":80,"candidatesTokenCount":9}}
+

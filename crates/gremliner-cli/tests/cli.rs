@@ -239,3 +239,80 @@ fn scenario_schema_discovery_cli_schema_json() {
     assert!(String::from_utf8_lossy(&text.stdout).contains("(person)-[knows]->(person)"));
     let _ = std::fs::remove_dir_all(&data);
 }
+
+#[test]
+fn scenario_llm_providers_cli_llm_test() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
+    let fixture = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../llm/tests/fixtures/openai-text.sse"
+    ))
+    .unwrap();
+    let server = runtime.block_on(llm::testing::MockServer::start(vec![
+        llm::testing::Route::sse("/v1/chat/completions", &fixture),
+    ]));
+    let data = std::env::temp_dir().join(format!("gremliner-cli-llm-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data);
+    let base = format!("{}/v1", server.base);
+    let added = cli(
+        &data,
+        &[
+            "llm",
+            "add",
+            "--name",
+            "Local",
+            "--preset",
+            "ollama",
+            "--model",
+            "qwen2.5-coder",
+            "--base-url",
+            &base,
+            "--default",
+        ],
+    );
+    assert!(
+        added.status.success(),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let list = cli(&data, &["llm", "list"]);
+    assert!(String::from_utf8_lossy(&list.stdout).contains("(default)"));
+    let out = cli(&data, &["llm", "test", "--profile", "Local"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.starts_with("Hello! Graph databases model networks."),
+        "{stdout}"
+    );
+    assert!(stdout.contains("First token "), "{stdout}");
+    assert!(stdout.contains("total "), "{stdout}");
+    // A failing profile exits non-zero.
+    let bad = cli(
+        &data,
+        &[
+            "llm",
+            "add",
+            "--name",
+            "Dead",
+            "--preset",
+            "custom",
+            "--model",
+            "m",
+            "--base-url",
+            "http://127.0.0.1:1/v1",
+        ],
+    );
+    assert!(bad.status.success());
+    let failed = cli(&data, &["llm", "test", "--profile", "Dead"]);
+    assert!(!failed.status.success());
+    assert!(String::from_utf8_lossy(&failed.stderr).starts_with("FAILED: "));
+    let _ = std::fs::remove_dir_all(&data);
+}

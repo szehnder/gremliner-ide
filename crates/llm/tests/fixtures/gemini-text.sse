@@ -1,0 +1,6 @@
+data: {"candidates":[{"content":{"parts":[{"text":"Hello! Graph databases"}],"role":"model"}}],"usageMetadata":{"promptTokenCount":12}}
+
+data: {"candidates":[{"content":{"parts":[{"text":" excel at relationships."}],"role":"model"}}]}
+
+data: {"candidates":[{"content":{"parts":[{"text":" Like routes."}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":14,"totalTokenCount":26}}
+

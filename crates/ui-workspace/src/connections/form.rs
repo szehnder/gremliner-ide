@@ -434,7 +434,12 @@ impl ConnectionForm {
     }
 }
 
-fn field(label: &'static str, control: impl IntoElement, error: Option<&String>, cx: &App) -> Div {
+pub(crate) fn field(
+    label: &'static str,
+    control: impl IntoElement,
+    error: Option<&String>,
+    cx: &App,
+) -> Div {
     let theme = cx.theme();
     v_flex()
         .gap(Tokens::space(1.0))

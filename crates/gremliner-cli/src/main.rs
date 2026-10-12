@@ -4,6 +4,7 @@
 mod connections;
 mod lang;
 mod layout_bench;
+mod llm_cmd;
 mod query;
 mod render_bench;
 mod schema_cmd;
@@ -58,6 +59,11 @@ enum Command {
     Connections {
         #[command(subcommand)]
         cmd: connections::Cmd,
+    },
+    /// Manage and test LLM profiles (shared with the app).
+    Llm {
+        #[command(subcommand)]
+        cmd: llm_cmd::Cmd,
     },
     /// Run a Gremlin script against a server and print the results.
     Query {
@@ -145,6 +151,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Connections { cmd } => connections::run(cmd, cli.data_dir, &runtime)?,
+        Command::Llm { cmd } => llm_cmd::run(cmd, cli.data_dir, &runtime)?,
         Command::LayoutBench {
             dataset,
             layout,

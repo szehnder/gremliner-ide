@@ -50,6 +50,14 @@ const MIGRATIONS: &[&str] = &[
         discovered_at INTEGER NOT NULL,
         json TEXT NOT NULL
     );",
+    // 6: LLM profiles (JSON documents; API keys live in the credential store).
+    "CREATE TABLE llm_profiles (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        json TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+    );",
 ];
 
 /// The schema version after every migration has run.
