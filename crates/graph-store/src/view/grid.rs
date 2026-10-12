@@ -107,14 +107,17 @@ impl SpatialGrid {
     /// `radius` world units of `p`.
     pub fn node_at(&self, store: &GraphStore, p: Vec2, radius: f32) -> Option<NodeIx> {
         let positions = store.positions();
-        let r2 = radius * radius;
+        let radii = store.node_radii();
+        // Nodes larger than the pick radius (stylesheet sizes) are hit anywhere on their disc.
+        let reach = radius.max(store.max_node_radius());
         let mut best: Option<u32> = None;
         self.for_each_in(
-            [p[0] - radius, p[1] - radius, p[0] + radius, p[1] + radius],
+            [p[0] - reach, p[1] - reach, p[0] + reach, p[1] + reach],
             |i| {
                 let q = positions[i as usize];
                 let d2 = (q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2);
-                if d2 <= r2 && best.is_none_or(|b| i > b) {
+                let r = radius.max(radii[i as usize]);
+                if d2 <= r * r && best.is_none_or(|b| i > b) {
                     best = Some(i);
                 }
             },

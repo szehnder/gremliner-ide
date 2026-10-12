@@ -6,8 +6,9 @@ use gpui_kit::{
     App, BorderStyle, Bounds, Corners, Edges, Hsla, PaintQuad, Pixels, SharedString, TextAlign,
     TextRun, TransformationMatrix, Window, point, px, quad, size,
 };
+use graph_store::style::{ColorRef, Looks, Shape};
 use graph_store::view::{Camera, Lod, SceneParams, SceneSink, SceneStats, Vec2, build_scene};
-use graph_store::{GraphStore, LabelIx, NodeIx, flags};
+use graph_store::{EdgeIx, GraphStore, LabelIx, NodeIx, flags};
 
 use crate::theme::CanvasStyle;
 
@@ -16,8 +17,19 @@ pub struct FrameInput<'a> {
     pub camera: &'a Camera,
     pub params: &'a SceneParams,
     pub style: &'a CanvasStyle,
+    /// Stylesheet looks per label (colours, shapes, icons).
+    pub looks: &'a Looks,
     pub hovered: Option<NodeIx>,
     pub bounds: Bounds<Pixels>,
+}
+
+/// The fill for vertex label `label`: the stylesheet colour or the label's palette slot.
+pub fn vertex_color(style: &CanvasStyle, looks: &Looks, label: LabelIx) -> Hsla {
+    match looks.vertex(label).map(|l| l.color) {
+        Some(ColorRef::Rgb(c)) => crate::theme::color_from_bytes(c.0),
+        Some(ColorRef::Palette(i)) => style.palette[i as usize % style.palette.len()],
+        None => style.palette[label.0 as usize % style.palette.len()],
+    }
 }
 
 pub trait GraphRenderer {
@@ -46,6 +58,7 @@ pub struct PendingLabel {
 pub struct GpuiPrimitives {
     node_quads: Vec<PaintQuad>,
     edges: Vec<EdgeSprite>,
+    sprites: Vec<NodeSprite>,
 }
 
 /// One edge or arrowhead drawn as a transformed sprite.
@@ -55,6 +68,21 @@ struct EdgeSprite {
     transform: TransformationMatrix,
     highlight: bool,
     arrow: bool,
+    /// Stylesheet colour for the edge label (`None`: theme colour).
+    color: Option<Hsla>,
+}
+
+/// A node shape or icon drawn from an SVG tile scaled to the node (logical centre and radius).
+struct NodeSprite {
+    center: Vec2,
+    radius: f32,
+    color: Hsla,
+    kind: SpriteKind,
+}
+
+enum SpriteKind {
+    Shape(Shape),
+    Icon(SharedString),
 }
 
 struct Sink<'a> {
@@ -62,15 +90,25 @@ struct Sink<'a> {
     origin: Vec2,
     node_quads: &'a mut Vec<PaintQuad>,
     edges: &'a mut Vec<EdgeSprite>,
+    sprites: &'a mut Vec<NodeSprite>,
     labels: Vec<PendingLabel>,
+    /// Icons are drawn only when nodes are at least this large on screen.
+    icons: bool,
 }
 
 /// Sprite tiles: a horizontal stripe covering the middle half of the tile height (soft top/bottom
 /// edges from bilinear sampling give cheap anti-aliasing), and an arrowhead pointing +x.
 const STRIPE_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="0" y="4" width="16" height="8" fill="white"/></svg>"#;
 const ARROW_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><polygon points="0,1 16,8 0,15" fill="white"/></svg>"#;
+const DIAMOND_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><polygon points="16,0 32,16 16,32 0,16" fill="white"/></svg>"#;
+const HEXAGON_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><polygon points="8,2 24,2 32,16 24,30 8,30 0,16" fill="white"/></svg>"#;
 /// Logical size of the tile request; the tile is rasterised once and reused for every edge.
 const TILE: f32 = 16.0;
+/// Logical size of node shape and icon tiles (scaled per node by a transform, so the atlas holds one
+/// tile per shape or icon rather than one per size).
+const NODE_TILE: f32 = 32.0;
+/// Icons need room: only from this on-screen node radius.
+const ICON_MIN_RADIUS: f32 = 7.0;
 /// Fraction of the stripe tile height that is opaque (rect height 8 of 16).
 const STRIPE_FILL: f32 = 0.5;
 
@@ -104,6 +142,16 @@ fn rect_transform(
     }
 }
 
+impl Sink<'_> {
+    fn edge_color(&self, label: LabelIx) -> Option<Hsla> {
+        self.input
+            .looks
+            .edge(label)
+            .and_then(|l| l.color)
+            .map(|c| crate::theme::color_from_bytes(c.0))
+    }
+}
+
 impl SceneSink for Sink<'_> {
     fn edge_triangle(&mut self, _label: LabelIx, _highlight: bool, _tri: [Vec2; 3]) {
         // Unused: edges arrive as segments/arrows and are drawn as sprites.
@@ -111,7 +159,7 @@ impl SceneSink for Sink<'_> {
 
     fn edge_segment(
         &mut self,
-        _label: LabelIx,
+        label: LabelIx,
         highlight: bool,
         a: Vec2,
         _b: Vec2,
@@ -128,12 +176,13 @@ impl SceneSink for Sink<'_> {
             },
             highlight,
             arrow: false,
+            color: self.edge_color(label),
         });
     }
 
     fn arrow(
         &mut self,
-        _label: LabelIx,
+        label: LabelIx,
         highlight: bool,
         tip: Vec2,
         dir: Vec2,
@@ -152,12 +201,13 @@ impl SceneSink for Sink<'_> {
             },
             highlight,
             arrow: true,
+            color: self.edge_color(label),
         });
     }
 
     fn node(&mut self, node: NodeIx, label: LabelIx, center: Vec2, radius: f32, node_flags: u8) {
         let style = self.input.style;
-        let mut fill: Hsla = style.palette[label.0 as usize % style.palette.len()];
+        let mut fill: Hsla = vertex_color(style, self.input.looks, label);
         if node_flags & flags::PLACEHOLDER != 0 {
             // Not fetched yet: drawn faded until its properties arrive.
             fill = fill.opacity(0.4);
@@ -172,18 +222,79 @@ impl SceneSink for Sink<'_> {
             (0.0, style.selection)
         };
         let o = self.origin;
-        let bounds = Bounds::new(
-            point(px(center[0] - radius + o[0]), px(center[1] - radius + o[1])),
-            gpui_kit::size(px(radius * 2.0), px(radius * 2.0)),
-        );
-        self.node_quads.push(quad(
-            bounds,
-            Corners::all(px(radius)),
-            fill,
-            Edges::all(px(border_w)),
-            border_color,
-            BorderStyle::Solid,
-        ));
+        let look = self.input.looks.vertex(label);
+        let shape = look.map_or(Shape::Circle, |l| l.shape);
+        let c = [center[0] + o[0], center[1] + o[1]];
+        match shape {
+            Shape::Circle | Shape::Square => {
+                let bounds = Bounds::new(
+                    point(px(c[0] - radius), px(c[1] - radius)),
+                    gpui_kit::size(px(radius * 2.0), px(radius * 2.0)),
+                );
+                let corner = if shape == Shape::Circle {
+                    radius
+                } else {
+                    (radius * 0.25).min(4.0)
+                };
+                self.node_quads.push(quad(
+                    bounds,
+                    Corners::all(px(corner)),
+                    fill,
+                    Edges::all(px(border_w)),
+                    border_color,
+                    BorderStyle::Solid,
+                ));
+            }
+            Shape::Diamond | Shape::Hexagon => {
+                if border_w > 0.0 {
+                    // The border is the same shape, slightly larger, underneath.
+                    self.sprites.push(NodeSprite {
+                        center: c,
+                        radius: radius + border_w,
+                        color: border_color,
+                        kind: SpriteKind::Shape(shape),
+                    });
+                }
+                self.sprites.push(NodeSprite {
+                    center: c,
+                    radius,
+                    color: fill,
+                    kind: SpriteKind::Shape(shape),
+                });
+            }
+        }
+        if self.icons
+            && radius >= ICON_MIN_RADIUS
+            && let Some(icon) = look.and_then(|l| l.icon.clone())
+        {
+            // Light icons on dark fills and vice versa.
+            let on = if fill.l > 0.6 {
+                style.icon_on_light
+            } else {
+                style.icon_on_dark
+            };
+            self.sprites.push(NodeSprite {
+                center: c,
+                radius: radius * 0.6,
+                color: on,
+                kind: SpriteKind::Icon(SharedString::from(format!("icons/{icon}.svg"))),
+            });
+        }
+    }
+
+    fn edge_label(&mut self, edge: EdgeIx, anchor: Vec2, font_px: f32) {
+        let text = self.input.store.edge_caption(edge);
+        if text.is_empty() {
+            return;
+        }
+        self.labels.push(PendingLabel {
+            text: SharedString::from(text.to_string()),
+            anchor: [
+                anchor[0] + self.origin[0],
+                anchor[1] + self.origin[1] - font_px * 0.6,
+            ],
+            font_px,
+        });
     }
 
     fn label(&mut self, node: NodeIx, anchor: Vec2, font_px: f32) {
@@ -217,12 +328,15 @@ impl GraphRenderer for GpuiPrimitives {
         let lod = Lod::for_radius(input.params.node_radius * input.camera.zoom, input.params);
         self.node_quads.clear();
         self.edges.clear();
+        self.sprites.clear();
         let mut sink = Sink {
             input,
             origin,
             node_quads: &mut self.node_quads,
             edges: &mut self.edges,
+            sprites: &mut self.sprites,
             labels: Vec::new(),
+            icons: lod == Lod::Full,
         };
         let stats = build_scene(input.store, input.camera, viewport, input.params, &mut sink);
         let labels = std::mem::take(&mut sink.labels);
@@ -257,6 +371,9 @@ impl GraphRenderer for GpuiPrimitives {
                     let t = rect_transform(tile_o, side, start, dir, len * sf, height * sf);
                     let color = if e.highlight {
                         input.style.edge_highlight
+                    } else if let Some(c) = e.color {
+                        // Stylesheet colours keep the theme's edge translucency.
+                        c.opacity(if lod == Lod::Far { 0.35 } else { 0.75 })
                     } else {
                         normal
                     };
@@ -276,10 +393,33 @@ impl GraphRenderer for GpuiPrimitives {
                 }
             });
         }
-        if !self.node_quads.is_empty() {
+        if !self.node_quads.is_empty() || !self.sprites.is_empty() {
+            let node_tile = Bounds::new(input.bounds.origin, size(px(NODE_TILE), px(NODE_TILE)));
+            let node_side = NODE_TILE * sf;
             window.paint_layer(input.bounds, |window| {
                 for q in self.node_quads.drain(..) {
                     window.paint_quad(q);
+                }
+                for s in &self.sprites {
+                    // Scale the tile (at the canvas origin) onto the node's square.
+                    let k = s.radius * 2.0 * sf / node_side;
+                    let corner = [(s.center[0] - s.radius) * sf, (s.center[1] - s.radius) * sf];
+                    let t = TransformationMatrix {
+                        rotation_scale: [[k, 0.0], [0.0, k]],
+                        translation: [corner[0] - k * tile_o[0], corner[1] - k * tile_o[1]],
+                    };
+                    let (path, data): (SharedString, Option<&[u8]>) = match &s.kind {
+                        SpriteKind::Shape(Shape::Diamond) => (
+                            SharedString::new_static("graph-canvas/diamond.svg"),
+                            Some(DIAMOND_SVG),
+                        ),
+                        SpriteKind::Shape(_) => (
+                            SharedString::new_static("graph-canvas/hexagon.svg"),
+                            Some(HEXAGON_SVG),
+                        ),
+                        SpriteKind::Icon(path) => (path.clone(), None),
+                    };
+                    let _ = window.paint_svg(node_tile, path, data, t, s.color, cx);
                 }
             });
         }

@@ -6,6 +6,8 @@ pub mod graph_view;
 pub mod json_view;
 pub mod result_set;
 pub mod results_view;
+pub mod style_editor;
+pub mod style_library;
 pub mod table_view;
 
 pub use graph_view::{FetchKind, FetchRequest, GraphView, GraphViewEvent};

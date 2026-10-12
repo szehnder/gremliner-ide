@@ -97,6 +97,8 @@ pub struct GraphCanvas {
     /// The user panned or zoomed since the last fit (hosts stop auto-fitting then).
     camera_touched: bool,
     layout: Option<LayoutWorker>,
+    /// Stylesheet looks per label.
+    looks: graph_store::style::Looks,
     /// Generation of the running layout job (frames of other generations are ignored).
     layout_generation: u64,
     layout_running: bool,
@@ -143,6 +145,7 @@ impl GraphCanvas {
             camera_anim: None,
             camera_touched: false,
             layout: None,
+            looks: graph_store::style::Looks::default(),
             layout_generation: 0,
             layout_running: false,
             fit_after_layout: false,
@@ -285,6 +288,20 @@ impl GraphCanvas {
 
     pub fn style(&self) -> &CanvasStyle {
         &self.style
+    }
+
+    /// Applies resolved stylesheet looks (colours, shapes, icons, label density).
+    pub fn set_looks(&mut self, looks: graph_store::style::Looks) {
+        self.params.min_label_px = looks.globals.min_label_px.max(4.0);
+        self.params.max_labels = looks.globals.max_labels();
+        self.params.edge_labels = looks.globals.show_edge_captions;
+        self.looks = looks;
+        self.style_version += 1;
+        self.minimap_image = None;
+    }
+
+    pub fn looks(&self) -> &graph_store::style::Looks {
+        &self.looks
     }
 
     /// Fit the graph into the viewport on the next frame.
@@ -472,7 +489,13 @@ impl GraphCanvas {
         };
         let mut params = self.params;
         params.min_node_px = 0.75;
-        let mut colors = raster_colors(&self.style, true, true);
+        let mut colors = raster_colors(
+            &self.style,
+            &self.looks,
+            self.store.vertex_label_count(),
+            true,
+            true,
+        );
         colors.palette = vec![
             colors
                 .palette
@@ -834,7 +857,13 @@ fn paint_frame(
             );
             this.raster.mark_pending(key);
             this.last_raster_request = Some(Instant::now());
-            let colors = raster_colors(&this.style, lod == Lod::Far, raster_nodes);
+            let colors = raster_colors(
+                &this.style,
+                &this.looks,
+                this.store.vertex_label_count(),
+                lod == Lod::Far,
+                raster_nodes,
+            );
             request = Some(spawn_raster(this.store.clone(), key, this.params, colors));
         }
         (use_raster, raster_nodes, request)
@@ -879,6 +908,7 @@ fn paint_frame(
                 camera: &this.camera,
                 params: &params,
                 style: &this.style,
+                looks: &this.looks,
                 hovered: this.hovered,
                 bounds,
             };

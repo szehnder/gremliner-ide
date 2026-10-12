@@ -25,6 +25,8 @@ use graph_store::{
 };
 use gremlin_model::elements::{ElementSet, elements};
 use gremlin_model::{GValue, console};
+
+use crate::style_library::StyleLibrary;
 use ui_theme::Tokens;
 
 actions!(
@@ -145,8 +147,6 @@ pub const DEFAULT_EXPAND_CAP: usize = 100;
 pub const EDGES_BETWEEN_LIMIT: usize = 2_000;
 /// Ids per follow-up query.
 const ID_BATCH: usize = 500;
-/// Property keys tried, in order, for a node's caption.
-const CAPTION_KEYS: [&str; 6] = ["name", "code", "title", "label", "username", "id"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExpandDirection {
@@ -249,7 +249,13 @@ pub struct GraphView {
     filter_op: FilterOp,
     show_filter: bool,
     show_legend: bool,
+    show_style_editor: bool,
     layout: LayoutSettings,
+    /// The stylesheet in use (an id in the shared [`StyleLibrary`]).
+    stylesheet: String,
+    /// The connection this graph's results come from (for its default stylesheet).
+    connection: Option<String>,
+    style_editor: Option<Entity<crate::style_editor::StyleEditor>>,
     accumulate: bool,
     edges_between: bool,
     expand_cap: usize,
@@ -283,6 +289,7 @@ impl Focusable for GraphView {
 impl GraphView {
     pub fn new(window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let canvas = cx.new(|cx| GraphCanvas::new(GraphStore::new(), cx));
+        let library = StyleLibrary::global(cx);
         let search =
             cx.new(|cx| InputState::new(window, cx).placeholder("Find node by id or property"));
         let filter_key = cx.new(|cx| InputState::new(window, cx).placeholder("property"));
@@ -295,6 +302,7 @@ impl GraphView {
                     }
                 }),
                 cx.observe(&canvas, |_, _, cx| cx.notify()),
+                cx.observe(&library, |this: &mut Self, _, cx| this.restyle(cx)),
                 cx.subscribe_in(&search, window, |this, state, event: &InputEvent, _, cx| {
                     match event {
                         InputEvent::Change => {
@@ -335,7 +343,11 @@ impl GraphView {
             filter_op: FilterOp::Gt,
             show_filter: false,
             show_legend: true,
+            show_style_editor: false,
             layout: LayoutSettings::default(),
+            stylesheet: crate::style_library::DEFAULT_ID.to_owned(),
+            connection: None,
+            style_editor: None,
             accumulate: false,
             edges_between: true,
             expand_cap: DEFAULT_EXPAND_CAP,
@@ -516,6 +528,7 @@ impl GraphView {
         }
         let delta = self.delta_for(set);
         let report = self.update_store(cx, |g| g.merge(delta));
+        self.restyle(cx);
         if self.auto_fit {
             let touched = self.canvas.read(cx).camera_touched();
             if touched {
@@ -525,6 +538,80 @@ impl GraphView {
             }
         }
         report
+    }
+
+    // ---- style -------------------------------------------------------------------------------
+
+    pub fn stylesheet_id(&self) -> &str {
+        &self.stylesheet
+    }
+
+    /// Switch to stylesheet `id` (re-renders right away).
+    pub fn set_stylesheet(&mut self, id: &str, cx: &mut Context<'_, Self>) {
+        self.stylesheet = id.to_owned();
+        self.restyle(cx);
+        cx.notify();
+    }
+
+    pub fn connection(&self) -> Option<&str> {
+        self.connection.as_deref()
+    }
+
+    /// The connection results come from. The first time, its default stylesheet (if any) is applied.
+    pub fn set_connection(&mut self, connection: &str, cx: &mut Context<'_, Self>) {
+        if self.connection.as_deref() == Some(connection) {
+            return;
+        }
+        let first = self.connection.is_none();
+        self.connection = Some(connection.to_owned());
+        if first {
+            let library = StyleLibrary::global(cx);
+            if let Some(id) = library.read(cx).default_for_connection(connection) {
+                let id = id.to_owned();
+                self.set_stylesheet(&id, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Re-resolve the stylesheet against the graph (after merges and stylesheet edits).
+    pub fn restyle(&mut self, cx: &mut Context<'_, Self>) {
+        let library = StyleLibrary::global(cx);
+        let sheet = library.read(cx).get_or_default(&self.stylesheet);
+        self.canvas.update(cx, |c, cx| {
+            let looks = library.update(cx, |l, _| {
+                graph_store::style::resolve(&sheet, c.store_mut(), l.auto_palette_mut())
+            });
+            c.set_looks(looks);
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    pub fn show_style_editor(&self) -> bool {
+        self.show_style_editor
+    }
+
+    pub fn set_show_style_editor(
+        &mut self,
+        on: bool,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.show_style_editor = on;
+        if on && self.style_editor.is_none() {
+            let graph = cx.weak_entity();
+            self.style_editor =
+                Some(cx.new(|cx| crate::style_editor::StyleEditor::new(graph, window, cx)));
+        }
+        if let Some(editor) = &self.style_editor {
+            editor.update(cx, |e, cx| e.reload_later(window, cx));
+        }
+        cx.notify();
+    }
+
+    pub fn style_editor(&self) -> Option<&Entity<crate::style_editor::StyleEditor>> {
+        self.style_editor.as_ref()
     }
 
     // ---- layout ------------------------------------------------------------------------------
@@ -597,7 +684,7 @@ impl GraphView {
                         .map(move |vp| (key.clone(), prop_value(&vp.value)))
                 })
                 .collect();
-            let caption = caption(&props).unwrap_or_else(|| id.to_string());
+            let caption = graph_store::style::default_caption(&props, &id.to_string());
             delta.nodes.push(NodeIn {
                 id,
                 label: v.label,
@@ -1070,6 +1157,7 @@ impl GraphView {
                     .bg(theme.border),
             )
             .child(self.render_layout_picker(cx))
+            .child(self.render_style_picker(cx))
             .child(if running {
                 Button::new("graph-layout-stop")
                     .icon(Icon::new(IconName::CircleX))
@@ -1179,6 +1267,44 @@ impl GraphView {
                     .text_color(theme.muted_foreground)
                     .child(stats.text()),
             )
+    }
+
+    fn render_style_picker(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let view = cx.weak_entity();
+        let library = StyleLibrary::global(cx);
+        let current = library.read(cx).get_or_default(&self.stylesheet);
+        let sheets: Vec<(String, String)> = library
+            .read(cx)
+            .sheets()
+            .iter()
+            .map(|s| (s.id.clone(), s.name.clone()))
+            .collect();
+        Button::new("graph-style-picker")
+            .label(format!("Style: {}", current.name))
+            .ghost()
+            .xsmall()
+            .dropdown_menu(move |mut menu, _, _| {
+                menu = menu.label("Stylesheet");
+                for (id, name) in &sheets {
+                    let view = view.clone();
+                    let id = id.clone();
+                    menu = menu.item(
+                        PopupMenuItem::new(name.clone())
+                            .checked(id == current.id)
+                            .on_click(move |_, _, cx| {
+                                let _ = view.update(cx, |v, cx| v.set_stylesheet(&id, cx));
+                            }),
+                    );
+                }
+                let view = view.clone();
+                menu.separator()
+                    .item(
+                        PopupMenuItem::new("Edit stylesheet…").on_click(move |_, window, cx| {
+                            let _ =
+                                view.update(cx, |v, cx| v.set_show_style_editor(true, window, cx));
+                        }),
+                    )
+            })
     }
 
     fn render_layout_picker(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
@@ -1628,30 +1754,60 @@ impl Render for GraphView {
             }))
             .child(self.render_toolbar(cx))
             .child(
-                div()
-                    .relative()
+                h_flex()
                     .flex_1()
                     .min_h_0()
-                    .child(canvas_area)
-                    .when(empty, |el| {
-                        el.child(
-                            div()
-                                .absolute()
-                                .inset_0()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_color(theme.muted_foreground)
-                                .child("No vertices or edges to draw in this result."),
-                        )
-                    })
-                    .when(self.show_legend && !empty, |el| {
-                        el.child(self.render_legend(cx))
-                    })
-                    .when(self.show_filter, |el| el.child(self.render_filter(cx)))
-                    .children(self.render_more(cx))
-                    .children(self.render_notice(cx)),
+                    .child(self.render_body(canvas_area, empty, cx))
+                    .when_some(
+                        self.style_editor.clone().filter(|_| self.show_style_editor),
+                        |el, editor| {
+                            el.child(
+                                div()
+                                    .w(Tokens::size(320.0))
+                                    .h_full()
+                                    .flex_none()
+                                    .border_l(Tokens::BORDER)
+                                    .border_color(theme.border)
+                                    .child(editor),
+                            )
+                        },
+                    ),
             )
+    }
+}
+
+impl GraphView {
+    fn render_body(
+        &self,
+        canvas_area: impl IntoElement,
+        empty: bool,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement {
+        let theme = cx.theme().clone();
+        div()
+            .relative()
+            .flex_1()
+            .h_full()
+            .min_w_0()
+            .child(canvas_area)
+            .when(empty, |el| {
+                el.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_color(theme.muted_foreground)
+                        .child("No vertices or edges to draw in this result."),
+                )
+            })
+            .when(self.show_legend && !empty, |el| {
+                el.child(self.render_legend(cx))
+            })
+            .when(self.show_filter, |el| el.child(self.render_filter(cx)))
+            .children(self.render_more(cx))
+            .children(self.render_notice(cx))
     }
 }
 
@@ -1679,15 +1835,6 @@ fn prop_value(v: &GValue) -> PropValue {
         GValue::String(s) => PropValue::Text(s.as_str().into()),
         other => PropValue::Text(console::format(other).into()),
     }
-}
-
-fn caption(props: &Props) -> Option<String> {
-    CAPTION_KEYS.iter().find_map(|key| {
-        props
-            .iter()
-            .find(|(k, _)| &**k == *key)
-            .map(|(_, v)| v.to_string())
-    })
 }
 
 /// A Gremlin literal for an id value with its exact type (`1`, `1L`, `'a'`), or `None` when the type has
@@ -1802,8 +1949,8 @@ mod tests {
             ("code".into(), PropValue::Text("AUS".into())),
             ("desc".into(), PropValue::Text("Austin".into())),
         ];
-        assert_eq!(caption(&props).as_deref(), Some("AUS"));
-        assert_eq!(caption(&Props::new()), None);
+        assert_eq!(graph_store::style::default_caption(&props, "3"), "AUS");
+        assert_eq!(graph_store::style::default_caption(&Props::new(), "3"), "3");
         assert_eq!(ext_id(&GValue::Int32(4)), ExtId::Int(4));
         assert_eq!(
             ext_id(&GValue::String("v1".into())),

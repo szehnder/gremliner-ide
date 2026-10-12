@@ -216,7 +216,14 @@ pub fn spawn_raster(
 }
 
 /// Converts GPUI colours to the rasteriser's straight-alpha RGBA bytes.
-pub fn raster_colors(style: &crate::theme::CanvasStyle, far: bool, nodes: bool) -> RasterColors {
+/// Raster colours: one palette entry per vertex label (stylesheet colours or palette slots).
+pub fn raster_colors(
+    style: &crate::theme::CanvasStyle,
+    looks: &graph_store::style::Looks,
+    labels: usize,
+    far: bool,
+    nodes: bool,
+) -> RasterColors {
     let to = |c: gpui_kit::Hsla| {
         let r = gpui_kit::Rgba::from(c);
         [
@@ -227,7 +234,15 @@ pub fn raster_colors(style: &crate::theme::CanvasStyle, far: bool, nodes: bool) 
         ]
     };
     RasterColors {
-        palette: style.palette.iter().map(|c| to(*c)).collect(),
+        palette: (0..labels.max(1))
+            .map(|i| {
+                to(crate::renderer::vertex_color(
+                    style,
+                    looks,
+                    graph_store::LabelIx(i as u16),
+                ))
+            })
+            .collect(),
         edge: to(if far { style.edge_far } else { style.edge }),
         nodes,
     }

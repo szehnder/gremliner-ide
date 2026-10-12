@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 ui-editor.workspace = true
 ui-results.workspace = true
+graph-store.workspace = true
 ui-assistant.workspace = true
 storage.workspace = true
 providers.workspace = true
@@ -26,7 +27,6 @@ gremlin-model.workspace = true
 gremlin-syntax.workspace = true
 
 [dev-dependencies]
-graph-store.workspace = true
 graph-layout.workspace = true
 gpui-kit = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "time"] }

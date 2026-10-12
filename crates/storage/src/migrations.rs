@@ -37,6 +37,13 @@ const MIGRATIONS: &[&str] = &[
         connection_id TEXT,
         updated_at INTEGER NOT NULL
     );",
+    // 4: graph stylesheets (JSON documents, schema_version inside).
+    "CREATE TABLE stylesheets (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+    );",
 ];
 
 /// The schema version after every migration has run.

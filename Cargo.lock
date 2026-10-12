@@ -3285,7 +3285,10 @@ dependencies = [
 name = "graph-store"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "rayon",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8081,6 +8084,7 @@ dependencies = [
  "regex",
  "serde_json",
  "ui-theme",
+ "uuid",
 ]
 
 [[package]]

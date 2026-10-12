@@ -460,3 +460,54 @@ fn layout_choice_persists_per_tab(cx: &mut TestAppContext) {
     });
     assert_eq!(rows, 2);
 }
+
+#[gpui_kit::test]
+fn scenario_graph_stylesheets_connection_default(cx: &mut TestAppContext) {
+    use ui_results::style_library::StyleLibrary;
+    if !testenv_up() {
+        return;
+    }
+    let mut env = setup(cx);
+    let conn = connection(&mut env, "Air routes", "g", false);
+    // A stylesheet "Air", made the connection's default.
+    let air = env.cx.update(|_, cx| {
+        let library = StyleLibrary::global(cx);
+        library.update(cx, |l, cx| {
+            let id = l.create("Air", cx);
+            l.set_connection_default(&conn.to_string(), Some(&id), cx);
+            id
+        })
+    });
+    let tab = tab(&mut env, conn);
+    let g = run(&mut env, &tab, "g.V().has('code','AUS')");
+    assert_eq!(
+        env.cx.update(|_, cx| g.read(cx).stylesheet_id().to_owned()),
+        air
+    );
+    // The stylesheet and the default were saved.
+    let saved = (0..200).find_map(|_| {
+        env.cx.run_until_parked();
+        let storage = env.cx.update(|_, cx| {
+            ui_workspace::settings::AppSettings::storage(cx)
+                .unwrap()
+                .clone()
+        });
+        let rows = futures::executor::block_on(storage.list_stylesheets()).unwrap();
+        let defaults = storage
+            .get_json_blocking::<std::collections::HashMap<String, String>>(
+                storage::Table::UiState,
+                ui_workspace::styles::DEFAULTS_KEY,
+            )
+            .unwrap();
+        match (rows.iter().find(|r| r.id == air), defaults) {
+            (Some(row), Some(d)) => Some((row.name.clone(), d)),
+            _ => {
+                std::thread::sleep(Duration::from_millis(10));
+                None
+            }
+        }
+    });
+    let (name, defaults) = saved.expect("persisted");
+    assert_eq!(name, "Air");
+    assert_eq!(defaults.get(&conn.to_string()), Some(&air));
+}

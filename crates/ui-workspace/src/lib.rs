@@ -15,6 +15,7 @@ pub mod persist;
 pub mod run;
 pub mod settings;
 pub mod status_bar;
+pub mod styles;
 pub mod workspace;
 
 use gpui_kit::App;
@@ -74,6 +75,7 @@ pub fn init(config: ShellConfig, cx: &mut App) {
         connections::ConnectionManager::init(db, config.secrets, cx);
     }
     AppSettings::init(general, config.storage, cx);
+    styles::init(cx);
 }
 
 fn register_commands(cx: &mut App) {

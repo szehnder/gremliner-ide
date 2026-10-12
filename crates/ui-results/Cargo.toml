@@ -11,6 +11,7 @@ gremlin-model.workspace = true
 graph-canvas.workspace = true
 graph-layout.workspace = true
 graph-store.workspace = true
+uuid.workspace = true
 gpui-kit.workspace = true
 ui-theme.workspace = true
 serde_json.workspace = true

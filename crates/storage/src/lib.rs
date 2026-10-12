@@ -8,7 +8,10 @@
 mod connections;
 mod migrations;
 pub mod secrets;
+mod stylesheets;
 mod tabs;
+
+pub use stylesheets::StylesheetRow;
 
 pub use connections::ConnectionRow;
 pub use tabs::TabRow;

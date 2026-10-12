@@ -2,6 +2,7 @@
 //! plus the pure view geometry ([`view`]) the canvas and the headless render benchmark share.
 
 pub mod merge;
+pub mod style;
 pub mod synth;
 pub mod view;
 pub mod visibility;
@@ -83,7 +84,12 @@ pub mod flags {
     /// Details not fetched yet: only the id and label are known (an edge endpoint that was not
     /// returned, or a vertex returned without properties, as in `path()` results).
     pub const PLACEHOLDER: u8 = 1 << 4;
+    /// Edges only: drawn dashed (from the stylesheet).
+    pub const DASHED: u8 = 1 << 5;
 }
+
+/// Node radius in world units when no stylesheet sets a size (12 px across at 100% zoom).
+pub const DEFAULT_NODE_RADIUS: f32 = 6.0;
 
 #[derive(Default, Clone)]
 struct Labels {
@@ -114,6 +120,9 @@ pub struct GraphStore {
     node_flags: Vec<u8>,
     node_caption: Vec<Arc<str>>,
     node_props: Vec<Props>,
+    /// World-unit radius per node (stylesheet sizes).
+    node_radius: Vec<f32>,
+    max_node_radius: f32,
     vertex_labels: Labels,
 
     edge_ext: Vec<ExtId>,
@@ -123,6 +132,9 @@ pub struct GraphStore {
     edge_label: Vec<LabelIx>,
     edge_flags: Vec<u8>,
     edge_props: Vec<Props>,
+    /// Width multiplier per edge (stylesheet widths; 1 is the default width).
+    edge_width: Vec<f32>,
+    edge_caption: Vec<Arc<str>>,
     edge_labels: Labels,
 
     visibility: visibility::Visibility,
@@ -162,6 +174,8 @@ impl GraphStore {
         self.node_flags.push(if hidden { flags::HIDDEN } else { 0 });
         self.node_caption.push(caption.into());
         self.node_props.push(Props::new());
+        self.node_radius.push(DEFAULT_NODE_RADIUS);
+        self.max_node_radius = self.max_node_radius.max(DEFAULT_NODE_RADIUS);
         self.revision += 1;
         ix
     }
@@ -179,6 +193,8 @@ impl GraphStore {
         let label = self.edge_labels.intern(label);
         self.edge_label.push(label);
         self.edge_props.push(Props::new());
+        self.edge_width.push(1.0);
+        self.edge_caption.push(Arc::from(""));
         let hidden = self.visibility.hides_edge_label(label)
             || (self.node_flags[src.0 as usize] | self.node_flags[dst.0 as usize]) & flags::HIDDEN
                 != 0;
@@ -248,6 +264,72 @@ impl GraphStore {
 
     pub fn edge_has_flag(&self, e: EdgeIx, flag: u8) -> bool {
         self.edge_flags[e.0 as usize] & flag != 0
+    }
+
+    pub fn set_caption(&mut self, n: NodeIx, caption: &str) {
+        if &*self.node_caption[n.0 as usize] != caption {
+            self.node_caption[n.0 as usize] = caption.into();
+            self.revision += 1;
+        }
+    }
+
+    pub fn node_radius(&self, n: NodeIx) -> f32 {
+        self.node_radius[n.0 as usize]
+    }
+
+    pub fn node_radii(&self) -> &[f32] {
+        &self.node_radius
+    }
+
+    /// The largest node radius (culling and hit-testing reach).
+    pub fn max_node_radius(&self) -> f32 {
+        self.max_node_radius.max(DEFAULT_NODE_RADIUS)
+    }
+
+    /// Sets every node's radius at once. Length must match the node count.
+    pub fn set_node_radii(&mut self, radii: &[f32]) {
+        self.node_radius.copy_from_slice(radii);
+        self.max_node_radius = radii.iter().copied().fold(DEFAULT_NODE_RADIUS, f32::max);
+        self.revision += 1;
+    }
+
+    pub fn edge_width(&self, e: EdgeIx) -> f32 {
+        self.edge_width[e.0 as usize]
+    }
+
+    pub fn edge_widths(&self) -> &[f32] {
+        &self.edge_width
+    }
+
+    /// Sets every edge's width multiplier at once. Length must match the edge count.
+    pub fn set_edge_widths(&mut self, widths: &[f32]) {
+        self.edge_width.copy_from_slice(widths);
+        self.revision += 1;
+    }
+
+    pub fn edge_caption(&self, e: EdgeIx) -> &Arc<str> {
+        &self.edge_caption[e.0 as usize]
+    }
+
+    pub fn set_edge_caption(&mut self, e: EdgeIx, caption: &str) {
+        if &*self.edge_caption[e.0 as usize] != caption {
+            self.edge_caption[e.0 as usize] = caption.into();
+            self.revision += 1;
+        }
+    }
+
+    /// Sets or clears a flag on one edge (e.g. dashed).
+    pub fn set_edge_flag(&mut self, e: EdgeIx, flag: u8, on: bool) {
+        let f = &mut self.edge_flags[e.0 as usize];
+        let before = *f;
+        if on {
+            *f |= flag;
+        } else {
+            *f &= !flag;
+        }
+        if *f != before {
+            self.revision += 1;
+        }
     }
 
     pub fn edge_endpoints_of(&self, e: EdgeIx) -> (NodeIx, NodeIx) {

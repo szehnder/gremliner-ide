@@ -290,6 +290,10 @@ impl Runner {
         self.per_tab.insert(request.tab_id, result.clone());
         self.tab_connection.insert(request.tab_id, connection_id);
         self.ensure_graph(request.tab_id, window, cx);
+        if let Some(graph) = self.graphs.get(&request.tab_id) {
+            let conn = connection_id.to_string();
+            graph.update(cx, |g, cx| g.set_connection(&conn, cx));
+        }
         let (cancel_tx, cancel_rx) = oneshot::channel();
         self.running = Some(Running {
             run_id,

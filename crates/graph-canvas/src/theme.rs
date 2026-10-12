@@ -23,6 +23,27 @@ pub struct CanvasStyle {
     pub hud_text: Hsla,
     pub minimap_radius: Pixels,
     pub hud_radius: Pixels,
+    /// Icon colour on light node fills, and on dark ones.
+    pub icon_on_light: Hsla,
+    pub icon_on_dark: Hsla,
+}
+
+/// An sRGB byte triple (stylesheet colours) as a GPUI colour.
+pub fn color_from_bytes(c: [u8; 3]) -> Hsla {
+    gpui_kit::Rgba {
+        r: f32::from(c[0]) / 255.0,
+        g: f32::from(c[1]) / 255.0,
+        b: f32::from(c[2]) / 255.0,
+        a: 1.0,
+    }
+    .into()
+}
+
+/// A GPUI colour as an sRGB byte triple.
+pub fn bytes_from_color(c: Hsla) -> [u8; 3] {
+    let r = gpui_kit::Rgba::from(c);
+    let b = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+    [b(r.r), b(r.g), b(r.b)]
 }
 
 impl CanvasStyle {
@@ -64,6 +85,8 @@ impl CanvasStyle {
             hud_text: hsla(120.0 / 360.0, 0.6, 0.75, 1.0),
             minimap_radius: px(6.0),
             hud_radius: px(4.0),
+            icon_on_light: hsla(0.0, 0.0, 0.1, 0.9),
+            icon_on_dark: hsla(0.0, 0.0, 1.0, 0.95),
         }
     }
 
@@ -100,6 +123,8 @@ impl CanvasStyle {
             hud_text: hsla(120.0 / 360.0, 0.6, 0.75, 1.0),
             minimap_radius: px(6.0),
             hud_radius: px(4.0),
+            icon_on_light: hsla(0.0, 0.0, 0.1, 0.9),
+            icon_on_dark: hsla(0.0, 0.0, 1.0, 0.95),
         }
     }
 }

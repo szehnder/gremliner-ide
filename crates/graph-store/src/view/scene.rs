@@ -31,6 +31,8 @@ pub struct SceneParams {
     pub arrows_above_px: f32,
     /// Which elements to emit.
     pub subset: Subset,
+    /// Emit edge captions (at full detail, within `max_labels / 2`).
+    pub edge_labels: bool,
 }
 
 /// Element subset emitted by [`build_scene`].
@@ -56,6 +58,7 @@ impl Default for SceneParams {
             far_below_px: 2.0,
             arrows_above_px: 4.0,
             subset: Subset::All,
+            edge_labels: false,
         }
     }
 }
@@ -129,6 +132,10 @@ pub trait SceneSink {
     fn node(&mut self, node: NodeIx, label: LabelIx, center: Vec2, radius: f32, node_flags: u8);
     /// A label for `node`, anchored below the disc at `anchor`, with the given font size.
     fn label(&mut self, node: NodeIx, anchor: Vec2, font_px: f32);
+    /// A caption for edge `edge`, centred on `anchor` (only when edge captions are on).
+    fn edge_label(&mut self, edge: crate::EdgeIx, anchor: Vec2, font_px: f32) {
+        let _ = (edge, anchor, font_px);
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -171,7 +178,16 @@ pub fn build_scene(
     let mut stats = SceneStats::default();
     let radius_px = (params.node_radius * camera.zoom).max(params.min_node_px);
     let lod = Lod::for_radius(params.node_radius * camera.zoom, params);
-    let pad = radius_px + 2.0;
+    // Per-node sizes (stylesheets) scale with the default; at far zoom every node uses the default.
+    let radii = store.node_radii();
+    let node_px = |i: usize| {
+        if lod == Lod::Far {
+            radius_px
+        } else {
+            (radii[i] * camera.zoom).max(params.min_node_px)
+        }
+    };
+    let pad = (store.max_node_radius() * camera.zoom).max(radius_px) + 2.0;
     let screen: Rect = [-pad, -pad, viewport[0] + pad, viewport[1] + pad];
     let positions = store.positions();
     let node_flags = store.node_flags();
@@ -184,6 +200,10 @@ pub fn build_scene(
     let (srcs, dsts) = store.edge_endpoints();
     let edge_labels = store.edge_labels();
     let edge_flags = store.edge_flags();
+    let edge_widths = store.edge_widths();
+    let centre = [viewport[0] * 0.5, viewport[1] * 0.5];
+    let want_edge_labels = params.edge_labels && lod == Lod::Full;
+    let mut edge_label_candidates: Vec<(f32, crate::EdgeIx, Vec2)> = Vec::new();
     for (i, (s, d)) in srcs.iter().zip(dsts).enumerate() {
         let (si, di) = (s.0 as usize, d.0 as usize);
         let (fs, fd) = (node_flags[si], node_flags[di]);
@@ -215,20 +235,54 @@ pub fn build_scene(
         let label = edge_labels[i];
         stats.visible_edges += 1;
 
-        let draw_arrow = arrows && l > radius_px * 2.0 + arrow_len;
+        let (rs, rd) = (node_px(si), node_px(di));
+        let draw_arrow = arrows && l > rs + rd + arrow_len;
         // Shorten the segment to end at the target's border (and the arrow's base when drawn).
-        let end_inset = if draw_arrow {
-            radius_px + arrow_len
-        } else {
-            0.0
-        };
+        let end_inset = if draw_arrow { rd + arrow_len } else { 0.0 };
         let e = [b[0] - ux * end_inset, b[1] - uy * end_inset];
-        sink.edge_segment(label, highlight, a, e, [ux, uy], l - end_inset, width);
-        stats.triangles += 2;
+        let w = if lod == Lod::Far {
+            width
+        } else {
+            (width * edge_widths[i]).clamp(0.5, 16.0)
+        };
+        if edge_flags[i] & flags::DASHED != 0 && lod != Lod::Far {
+            // Dashes: 6 px on, 4 px off (scaled with the width).
+            let (on, off) = (6.0 + w * 2.0, 4.0 + w);
+            let total = l - end_inset;
+            let mut t = 0.0;
+            while t < total {
+                let len = on.min(total - t);
+                let p = [a[0] + ux * t, a[1] + uy * t];
+                let q = [p[0] + ux * len, p[1] + uy * len];
+                sink.edge_segment(label, highlight, p, q, [ux, uy], len, w);
+                stats.triangles += 2;
+                t += on + off;
+            }
+        } else {
+            sink.edge_segment(label, highlight, a, e, [ux, uy], l - end_inset, w);
+            stats.triangles += 2;
+        }
         if draw_arrow {
-            let tip = [b[0] - ux * radius_px, b[1] - uy * radius_px];
+            let tip = [b[0] - ux * rd, b[1] - uy * rd];
             sink.arrow(label, highlight, tip, [ux, uy], arrow_len, arrow_half_w);
             stats.triangles += 1;
+        }
+        if want_edge_labels && l > 40.0 {
+            let mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+            let d2 = (mid[0] - centre[0]).powi(2) + (mid[1] - centre[1]).powi(2);
+            edge_label_candidates.push((d2, crate::EdgeIx(i as u32), mid));
+        }
+    }
+    if want_edge_labels {
+        let cap = params.max_labels / 2;
+        if edge_label_candidates.len() > cap {
+            edge_label_candidates.select_nth_unstable_by(cap, |a, b| a.0.total_cmp(&b.0));
+            edge_label_candidates.truncate(cap);
+        }
+        let font = (radius_px * 0.75).clamp(params.min_label_px, 12.0).round();
+        for (_, e, anchor) in edge_label_candidates {
+            sink.edge_label(e, anchor, font);
+            stats.labels += 1;
         }
     }
 
@@ -238,7 +292,6 @@ pub fn build_scene(
     let mut label_candidates: Vec<(f32, NodeIx, Vec2)> = Vec::new();
     // Quantised to half pixels so the renderer's shaped-text cache hits while zooming.
     let font_px = ((radius_px * 0.9).clamp(params.min_label_px, 14.0) * 2.0).round() / 2.0;
-    let centre = [viewport[0] * 0.5, viewport[1] * 0.5];
     for (i, p) in positions.iter().enumerate() {
         let f = node_flags[i];
         if f & flags::HIDDEN != 0 {
@@ -255,10 +308,11 @@ pub fn build_scene(
             continue;
         }
         stats.visible_nodes += 1;
-        sink.node(NodeIx(i as u32), labels[i], c, radius_px, f);
+        let r = node_px(i);
+        sink.node(NodeIx(i as u32), labels[i], c, r, f);
         if want_labels {
             let d2 = (c[0] - centre[0]).powi(2) + (c[1] - centre[1]).powi(2);
-            label_candidates.push((d2, NodeIx(i as u32), [c[0], c[1] + radius_px + 2.0]));
+            label_candidates.push((d2, NodeIx(i as u32), [c[0], c[1] + r + 2.0]));
         }
     }
 

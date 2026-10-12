@@ -139,3 +139,12 @@ Lessons learned while building with gpui-kit 0.7.x (`gpui-pre` 0.3.x). Add to th
   `Button::new(..).dropdown_menu(|menu, window, cx| menu.item(PopupMenuItem::new("x").checked(on).on_click(..)))`.
 - A background thread (the layout worker) cannot wake GPUI directly; the canvas polls its latest-wins frame
   slot in `paint` and keeps calling `window.request_animation_frame()` while a layout runs.
+- `window.paint_svg` caches one atlas tile per (path, size): drawing sprites at their final size thrashes
+  the atlas as nodes resize with zoom. Request a fixed-size tile at the canvas origin and scale it into
+  place with a `TransformationMatrix` (device pixels), as the canvas does for edges, shapes and icons.
+  Inline SVG bytes (`Some(data)`) need no asset; `None` loads the path (e.g. `icons/plane.svg`) from the
+  app's asset source.
+- An entity created inside another entity's update must not read that entity in its constructor
+  ("cannot read X while it is already being updated"); defer with `cx.defer_in(window, ..)`.
+- The design-token check matches substrings such as `rgb(` and `hsla(` anywhere on a line, including in
+  function names; keep colour helpers in a `theme.rs` module and name them without those substrings.

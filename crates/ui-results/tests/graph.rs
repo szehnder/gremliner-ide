@@ -466,3 +466,57 @@ fn scenario_graph_layouts_expand_keeps_context(cx: &mut TestAppContext) {
         );
     }
 }
+
+#[gpui_kit::test]
+fn scenario_graph_stylesheets_switch_stylesheet(cx: &mut TestAppContext) {
+    use ui_results::style_library::PRESENTATION_ID;
+    let (view, mut cx) = mount(cx);
+    ingest(&view, modern(), &mut cx);
+    let marko = node(&view, 1, &mut cx);
+    let radius =
+        |cx: &mut VisualTestContext| cx.update(|_, cx| view.read(cx).store(cx).node_radius(marko));
+    assert_eq!(radius(&mut cx), 6.0, "Default: 12 px nodes");
+    cx.update(|_, cx| view.update(cx, |v, cx| v.set_stylesheet(PRESENTATION_ID, cx)));
+    // Immediately, without another merge or frame.
+    assert_eq!(radius(&mut cx), 10.0, "Presentation: 20 px nodes");
+    let edge_captions = cx.update(|_, cx| {
+        view.read(cx)
+            .canvas()
+            .read(cx)
+            .looks()
+            .globals
+            .show_edge_captions
+    });
+    assert!(edge_captions);
+}
+
+#[gpui_kit::test]
+fn editing_a_label_style_in_the_panel_applies_live(cx: &mut TestAppContext) {
+    use graph_store::style::Shape;
+    let (view, mut cx) = mount(cx);
+    ingest(&view, modern(), &mut cx);
+    cx.update(|window, cx| view.update(cx, |v, cx| v.set_show_style_editor(true, window, cx)));
+    click("style-v-software", &mut cx);
+    click("style-shape-Diamond", &mut cx);
+    let shape = cx.update(|_, cx| {
+        let v = view.read(cx);
+        let l = v.store(cx).vertex_label_ix("software").unwrap();
+        v.canvas().read(cx).looks().vertex(l).unwrap().shape
+    });
+    assert_eq!(shape, Shape::Diamond);
+    // A caption template typed into the panel.
+    let editor = cx.update(|_, cx| view.read(cx).style_editor().unwrap().clone());
+    let lop = node(&view, 3, &mut cx);
+    let input = cx.update(|_, cx| editor.read(cx).caption_input().clone());
+    cx.update(|window, cx| input.update(cx, |s, cx| s.focus(window, cx)));
+    cx.simulate_input("{name} ({lang})");
+    cx.run_until_parked();
+    let text = cx.update(|_, cx| view.read(cx).store(cx).caption(lop).to_string());
+    assert_eq!(text, "lop (java)");
+    // Other labels are untouched.
+    let marko = node(&view, 1, &mut cx);
+    assert_eq!(
+        cx.update(|_, cx| view.read(cx).store(cx).caption(marko).to_string()),
+        "marko"
+    );
+}
