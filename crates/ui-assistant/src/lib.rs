@@ -1,11 +1,6 @@
-//! Prompt bar and assistant panel UI.
-//!
-//! See `AGENTS.md` for crate layering rules and `openspec/ROADMAP.md` for the change that fills this crate in.
+//! Assistant UI: the prompt bar with its verified result card (nl-to-gremlin). The host (the editor tab)
+//! runs the pipeline and handles Insert/Run.
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_compiles() {
-        assert_eq!(env!("CARGO_PKG_NAME"), "ui-assistant");
-    }
-}
+pub mod prompt_bar;
+
+pub use prompt_bar::{ClosePromptBar, Disclosure, OpenPromptBar, PromptBar, PromptBarEvent};

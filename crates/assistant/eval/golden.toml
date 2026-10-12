@@ -1,0 +1,202 @@
+# Golden prompts for `cargo xtask eval-assistant` (spec nl-to-gremlin, quality bar >= 90% with the
+# reference model). `alias` is the testenv traversal source; `labels` must appear quoted in the query.
+
+[[case]]
+prompt = "airports in Texas"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "which airports can I fly to from Austin"
+alias = "g"
+labels = ["airport", "route"]
+
+[[case]]
+prompt = "how many airports are there"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "count airports per country, top 5"
+alias = "g"
+labels = []
+
+[[case]]
+prompt = "the 10 airports with the most runways"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "airports in the UK with more than 3 runways"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "the longest route out of London Heathrow"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "which countries are in Europe"
+alias = "g"
+labels = ["continent"]
+
+[[case]]
+prompt = "how many routes leave Dallas Fort Worth"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "airports reachable from AUS with exactly one stop"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "show the routes between Austin and London with one stop"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "the highest airport in the world"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "list the codes of airports in Germany"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "which continent is Japan in"
+alias = "g"
+labels = []
+
+[[case]]
+prompt = "average elevation of airports in Mexico"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "airports with a longest runway over 15000 feet"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "cities in California that have airports"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "the busiest airports by number of outgoing routes, top 10"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "routes longer than 8000 miles"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "how many countries are there"
+alias = "g"
+labels = ["country"]
+
+[[case]]
+prompt = "airports in Australia sorted by elevation"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "which airports have direct flights to both LHR and JFK"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "number of airports per continent"
+alias = "g"
+labels = ["continent"]
+
+[[case]]
+prompt = "description of the airport with code SEA"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "airports within the US region US-FL"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "show me Austin and its direct destinations as a graph"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "the distance of the route from SFO to LAX"
+alias = "g"
+labels = ["route"]
+
+[[case]]
+prompt = "airports whose city name starts with San"
+alias = "g"
+labels = ["airport"]
+
+[[case]]
+prompt = "countries with more than 50 airports"
+alias = "g"
+labels = ["country"]
+
+[[case]]
+prompt = "which airports does Iceland have"
+alias = "g"
+labels = ["country"]
+
+[[case]]
+prompt = "who does marko know"
+alias = "gModern"
+labels = ["person"]
+
+[[case]]
+prompt = "what software did josh create"
+alias = "gModern"
+labels = ["software"]
+
+[[case]]
+prompt = "people older than 30"
+alias = "gModern"
+labels = ["person"]
+
+[[case]]
+prompt = "how many people are there"
+alias = "gModern"
+labels = ["person"]
+
+[[case]]
+prompt = "who created lop"
+alias = "gModern"
+labels = ["software"]
+
+[[case]]
+prompt = "the average age of people"
+alias = "gModern"
+labels = ["person"]
+
+[[case]]
+prompt = "software written in java"
+alias = "gModern"
+labels = ["software"]
+
+[[case]]
+prompt = "people who know someone who created software"
+alias = "gModern"
+labels = ["person"]
+
+[[case]]
+prompt = "the strongest knows relationship"
+alias = "gModern"
+labels = []
+
+[[case]]
+prompt = "names of everyone marko is connected to"
+alias = "gModern"
+labels = ["person"]

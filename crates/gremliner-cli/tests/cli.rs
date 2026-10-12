@@ -316,3 +316,146 @@ fn scenario_llm_providers_cli_llm_test() {
     assert!(String::from_utf8_lossy(&failed.stderr).starts_with("FAILED: "));
     let _ = std::fs::remove_dir_all(&data);
 }
+
+/// An OpenAI-compatible stream whose content is `answer` (JSON text), in three pieces.
+fn answer_stream(answer: &serde_json::Value) -> String {
+    let text = answer.to_string();
+    let third = text.len() / 3;
+    let pieces = [&text[..third], &text[third..2 * third], &text[2 * third..]];
+    let mut out = String::new();
+    for p in pieces {
+        let chunk = serde_json::json!({"choices": [{"index": 0, "delta": {"content": p}}]});
+        out.push_str(&format!("data: {chunk}\n\n"));
+    }
+    out.push_str("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n");
+    out
+}
+
+#[test]
+fn scenario_nl_to_gremlin_cli_nl() {
+    if !testenv_up() {
+        eprintln!("SKIPPED: testenv not reachable");
+        return;
+    }
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
+    let answer = serde_json::json!({
+        "query": "g.V().hasLabel('country').project('country','airports').by('code').by(out('contains').count()).order().by(select('airports'), desc).limit(5)",
+        "explanation": "The five countries with the most airports.",
+        "intent": "read",
+        "expected_shape": "table"
+    });
+    let server = runtime.block_on(llm::testing::MockServer::start(vec![
+        llm::testing::Route::sse("/v1/chat/completions", &answer_stream(&answer)),
+    ]));
+    let data = std::env::temp_dir().join(format!("gremliner-cli-nl-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data);
+    assert!(
+        cli(
+            &data,
+            &[
+                "connections",
+                "add",
+                "--name",
+                "Local",
+                "--url",
+                "ws://localhost:8182/gremlin"
+            ]
+        )
+        .status
+        .success()
+    );
+    let base = format!("{}/v1", server.base);
+    assert!(
+        cli(
+            &data,
+            &[
+                "llm",
+                "add",
+                "--name",
+                "Fake",
+                "--preset",
+                "custom",
+                "--model",
+                "m",
+                "--base-url",
+                &base
+            ]
+        )
+        .status
+        .success()
+    );
+    let out = cli(
+        &data,
+        &["nl", "--conn", "Local", "count airports per country, top 5"],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(stdout.starts_with("g.V().hasLabel('country')"), "{stdout}");
+    assert!(
+        stdout.contains("Syntax \u{2713} \u{b7} Schema \u{2713} \u{b7} Dry run \u{2713} 5 rows"),
+        "{stdout}"
+    );
+    let rows = stdout.lines().filter(|l| l.starts_with("==>")).count();
+    assert_eq!(rows, 5, "{stdout}");
+    // JSON form.
+    let out = cli(
+        &data,
+        &[
+            "nl",
+            "--conn",
+            "Local",
+            "--json",
+            "count airports per country, top 5",
+        ],
+    );
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+    assert_eq!(v["verified"], true);
+    assert_eq!(v["preview"].as_array().unwrap().len(), 5);
+    assert_eq!(v["badges"]["dry_run"]["status"], "passed");
+    let _ = std::fs::remove_dir_all(&data);
+}
+
+#[test]
+fn golden_set_is_well_formed() {
+    let set: toml::Value =
+        toml::from_str(include_str!("../../assistant/eval/golden.toml")).unwrap();
+    let cases = set["case"].as_array().unwrap();
+    let air = cases
+        .iter()
+        .filter(|c| c["alias"].as_str() == Some("g"))
+        .count();
+    let modern = cases
+        .iter()
+        .filter(|c| c["alias"].as_str() == Some("gModern"))
+        .count();
+    assert_eq!((air, modern), (30, 10));
+}
+
+/// The quality gate (spec: >= 90% with the reference model). Needs the testenv and a saved profile named
+/// in `GREMLINER_EVAL_PROFILE` (in the default data directory); skipped otherwise.
+#[test]
+fn scenario_nl_to_gremlin_golden_set_evaluation() {
+    let Ok(profile) = std::env::var("GREMLINER_EVAL_PROFILE") else {
+        eprintln!("SKIPPED: set GREMLINER_EVAL_PROFILE to an LLM profile to run the golden set");
+        return;
+    };
+    if !testenv_up() {
+        eprintln!("SKIPPED: testenv not reachable");
+        return;
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_gremliner-cli"))
+        .args(["eval", "--profile", &profile, "--min", "0.9"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    eprintln!("{stdout}");
+    assert!(out.status.success(), "golden set below 90%");
+}

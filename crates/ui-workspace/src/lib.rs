@@ -120,6 +120,13 @@ fn register_commands(cx: &mut App) {
             .when(When::EditorOpen)
             .keywords(&["execute"]),
         CommandMeta::new("Editor", "Format Query", editor::FormatQuery).when(When::EditorOpen),
+        CommandMeta::new(
+            "Assistant",
+            "Ask in Plain English",
+            ui_assistant::OpenPromptBar,
+        )
+        .when(When::EditorOpen)
+        .keywords(&["ai", "natural language", "llm", "prompt"]),
         CommandMeta::new("Editor", "Toggle Line Comment", editor::ToggleLineComment)
             .when(When::EditorOpen),
         CommandMeta::new("Editor", "Split Right", SplitRight).when(When::EditorOpen),

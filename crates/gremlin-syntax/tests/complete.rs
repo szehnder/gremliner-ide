@@ -309,3 +309,33 @@ fn scenario_autocomplete_completion_speed() {
     eprintln!("completion p95 {p95:.3} ms, max {:.3} ms", times[99]);
     assert!(p95 <= 30.0, "p95 {p95:.3} ms");
 }
+
+#[test]
+fn direction_mismatches_are_reported() {
+    let schema = air();
+    let issues = gremlin_syntax::complete::direction_issues(
+        "g.V().hasLabel('airport').out('contains').values('code')",
+        &schema,
+    );
+    assert_eq!(issues.len(), 1, "{issues:?}");
+    assert!(
+        issues[0].message.contains("use in('contains')"),
+        "{}",
+        issues[0].message
+    );
+    assert_eq!(issues[0].replacement.as_deref(), Some("in"));
+    assert!(
+        gremlin_syntax::complete::direction_issues(
+            "g.V().hasLabel('country').out('contains')",
+            &schema
+        )
+        .is_empty()
+    );
+    assert!(
+        gremlin_syntax::complete::direction_issues("g.V().out('contains')", &schema).is_empty()
+    );
+    assert_eq!(
+        gremlin_syntax::complete::lambdas("g.V().map{ it.get() }.count()").len(),
+        1
+    );
+}

@@ -45,3 +45,46 @@ changes: schema (`schema-discovery`), validation (`gremlin-language` + `autocomp
 - Pipeline tests with a scripted fake LLM (deterministic responses) against testenv: success, schema repair, server-error repair, give-up, mutation.
 - `cargo run -p gremliner-cli -- nl --conn Local "count airports per country, top 5"`.
 - `cargo xtask eval-assistant --profile <reference>` ≥ 90% (manual gate, needs an API key); Ollama result recorded.
+
+## As built
+
+- **`assistant` crate.**
+  - `context` builds the prompt (dialect, rules, one few-shot example, the compact schema, and the editor
+    query). Its insta snapshots cover a structure-only prompt and one with samples on Neptune.
+  - `answer` parses the reply: schema JSON, a forced-tool reply, JSON in prose or fences, a fenced
+    ```gremlin block, inline code, or a bare `g.` line.
+  - `check` validates the query: syntax, a single traversal from `g`, lambdas, unknown or unsupported
+    steps, and schema labels and keys. It uses the autocomplete warnings plus the new
+    `gremlin_syntax::complete::direction_issues`.
+  - `dryrun` holds `inject_limit` (no limit after a top-level aggregate; before a terminal step otherwise)
+    and the `DryRunner` trait, implemented for the Gremlin client.
+  - `pipeline::run` is the state machine. Write intent, or any mutation that `is_mutating` detects, is
+    never run, even when the model says "read". The best attempt is kept by score. Only one repair is
+    spent on "0 rows".
+  - `testing` provides the scripted LLM and database (feature `testing`).
+- **Privacy.** Sample values reach the prompt only when the connection shares them (local models by
+  default). Repair messages never contain dry-run rows.
+- **Tool calling** (`get_schema`, `dry_run`, and so on) is not used yet. The code-driven pipeline covers
+  every model, and the tools arrive with the assistant panel or the agent change.
+- **UI.**
+  - `ui_assistant::PromptBar` is the bar and card. The host is `EditorPanel`: Ctrl/Cmd+K, the toolbar's
+    "Ask" button, or the palette command "Assistant: Ask in Plain English".
+  - The tab runs the pipeline on the I/O runtime over the tab's connection session and the resolved LLM
+    profile, and streams events into the card.
+  - The card shows the highlighted query (`ui_editor::highlight_styles`), badges, a write warning,
+    remaining issues, and the preview: an offline `GraphView` for elements, a mini table otherwise.
+    Its actions are Insert (a new line after the cursor's line), Run (inserts, then runs without the
+    dry-run limit; writes ask first), Copy and Refine.
+- **Lessons.**
+  - Insert-then-run must defer the run, because the editor re-analyses on a deferred change event.
+  - "Open AI settings" reaches the workspace through `Workspace::for_window` (the root view), deferred
+    with `window.defer`. An action dispatched from that click may not reach the workspace.
+  - A long message in a flex row pushed the button off-screen until the text got `min_w_0`.
+- **CLI.**
+  - `gremliner-cli nl --conn C [--profile P] [--json] [--no-dry-run] "…"` exits with 2 when the query
+    is not verified.
+  - `gremliner-cli eval --profile P [--min 0.9]` and `cargo xtask eval-assistant --profile P` run the
+    golden set (`crates/assistant/eval/golden.toml`: 30 air-routes and 10 modern prompts).
+  - `scenario_nl_to_gremlin_golden_set_evaluation` runs only with `GREMLINER_EVAL_PROFILE` set.
+- **Not yet measured:** the ≥ 90% golden-set gate and the Ollama score. No reference model or local
+  model server was available while this was built.

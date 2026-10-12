@@ -15,6 +15,9 @@ pub struct Route {
     pub status: u16,
     pub content_type: &'static str,
     pub body: String,
+    /// Bodies for successive requests (the last repeats); overrides `body` when not empty.
+    pub sequence: Vec<String>,
+    served: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl Route {
@@ -25,6 +28,8 @@ impl Route {
             status,
             content_type: "application/json",
             body: body.into(),
+            sequence: Vec::new(),
+            served: Arc::default(),
         }
     }
 
@@ -35,7 +40,27 @@ impl Route {
             status: 200,
             content_type: "text/event-stream",
             body: body.into(),
+            sequence: Vec::new(),
+            served: Arc::default(),
         }
+    }
+
+    /// An SSE route answering successive requests with `bodies` in order.
+    pub fn sse_sequence(path: &str, bodies: Vec<String>) -> Self {
+        Self {
+            sequence: bodies,
+            ..Self::sse(path, "")
+        }
+    }
+
+    fn next_body(&self) -> String {
+        if self.sequence.is_empty() {
+            return self.body.clone();
+        }
+        let n = self
+            .served
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.sequence[n.min(self.sequence.len() - 1)].clone()
     }
 }
 
@@ -93,14 +118,15 @@ impl MockServer {
                         route.status, route.content_type
                     );
                     let _ = socket.write_all(head.as_bytes()).await;
+                    let body = route.next_body();
                     if route.content_type == "text/event-stream" {
-                        for chunk in route.body.split_inclusive("\n\n") {
+                        for chunk in body.split_inclusive("\n\n") {
                             let _ = socket.write_all(chunk.as_bytes()).await;
                             let _ = socket.flush().await;
                             tokio::time::sleep(Duration::from_millis(2)).await;
                         }
                     } else {
-                        let _ = socket.write_all(route.body.as_bytes()).await;
+                        let _ = socket.write_all(body.as_bytes()).await;
                     }
                     let _ = socket.shutdown().await;
                 });
@@ -158,4 +184,22 @@ async fn read_request(socket: &mut tokio::net::TcpStream) -> Option<Recorded> {
         headers,
         body,
     })
+}
+
+/// An OpenAI-compatible SSE body whose reply text is `content`, streamed in three pieces.
+pub fn openai_stream(content: &str) -> String {
+    let chars: Vec<char> = content.chars().collect();
+    let third = chars.len() / 3;
+    let pieces = [
+        chars[..third].iter().collect::<String>(),
+        chars[third..2 * third].iter().collect::<String>(),
+        chars[2 * third..].iter().collect::<String>(),
+    ];
+    let mut out = String::new();
+    for p in pieces {
+        let chunk = serde_json::json!({"choices": [{"index": 0, "delta": {"content": p}}]});
+        out.push_str(&format!("data: {chunk}\n\n"));
+    }
+    out.push_str("data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n");
+    out
 }

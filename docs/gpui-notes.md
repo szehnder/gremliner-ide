@@ -180,3 +180,23 @@ a tab, and `dock.select_panel(id, window, cx)` focuses it.
 
 `open_dialog` and alert dialogs slide and fade in over real time. In headless tests, wait for the
 target's bounds to stop changing before `window.click` (see `crates/ui-workspace/tests/support`).
+
+## Reaching the workspace from a panel; actions from clicks
+
+- `Workspace::for_window(window, cx)` reads the window's `Root` (`gpui_kit::component::Root`) and
+  downcasts its `view()` to `Workspace`.
+- A panel that needs a workspace method calls it inside `window.defer(cx, …)`. `cx.defer_in` would run
+  while the panel itself is still being updated.
+- `window.dispatch_action` from a button click may not reach handlers on ancestors when nothing focused
+  is on that path.
+
+## Edits then actions on the editor
+
+`QueryEditor` analyses text in its `InputEvent::Change` subscription, which is a deferred effect.
+Programmatic edits followed by `run()` in the same update see the old document, so defer the `run`
+(`cx.defer_in`).
+
+## Flex rows with long text
+
+A `flex_1` text child without `min_w_0()` will not shrink, so it pushes siblings (buttons) beyond the
+panel, where clicks land on whatever is drawn there.

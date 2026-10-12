@@ -327,10 +327,18 @@ dependencies = [
 name = "assistant"
 version = "0.1.0"
 dependencies = [
+ "assistant",
+ "futures",
+ "gremlin-client",
+ "gremlin-model",
  "gremlin-syntax",
+ "insta",
  "llm",
+ "log",
  "providers",
  "schema",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
@@ -3373,9 +3381,11 @@ dependencies = [
  "llm",
  "providers",
  "schema",
+ "serde",
  "serde_json",
  "storage",
  "tokio",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -8134,6 +8144,11 @@ version = "0.1.0"
 dependencies = [
  "assistant",
  "gpui-kit",
+ "gremlin-model",
+ "llm",
+ "ui-editor",
+ "ui-results",
+ "ui-theme",
 ]
 
 [[package]]
@@ -8182,6 +8197,7 @@ dependencies = [
 name = "ui-workspace"
 version = "0.1.0"
 dependencies = [
+ "assistant",
  "futures",
  "gpui-kit",
  "graph-layout",

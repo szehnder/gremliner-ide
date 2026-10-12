@@ -1045,7 +1045,12 @@ pub fn schema_issues(text: &str, schema: &Schema) -> Vec<SchemaIssue> {
         let flow = flow::at_args(&site.levels, Some(schema));
         for (i, arg) in call.args.iter().enumerate() {
             let Some(value) = &arg.string else { continue };
-            let role = role(&call.name, i, &call.args[..i], Some(schema));
+            // With all arguments known, `has(a, b, c)` starts with a label.
+            let role = if call.name == "has" && call.args.len() == 3 && i == 0 {
+                Role::Label
+            } else {
+                role(&call.name, i, &call.args[..i], Some(schema))
+            };
             let issue = match role {
                 Role::Label | Role::EdgeLabel if !schema.partial.labels => {
                     let edges = matches!(role, Role::EdgeLabel) || flow.is_edges();
@@ -1100,4 +1105,85 @@ pub fn schema_issues(text: &str, schema: &Schema) -> Vec<SchemaIssue> {
         }
     }
     out
+}
+
+/// Edge steps whose label never connects the labels at that point in that direction (e.g.
+/// `hasLabel('airport').out('contains')`, when `contains` points into airports).
+pub fn direction_issues(text: &str, schema: &Schema) -> Vec<SchemaIssue> {
+    if schema.in_progress || schema.partial.triples {
+        return Vec::new();
+    }
+    let scanned = scan(text, true);
+    let mut out = Vec::new();
+    for site in &scanned.sites {
+        let Some(level) = site.levels.last() else {
+            continue;
+        };
+        let call = &level.call;
+        let dir = match call.name.as_str() {
+            "out" | "outE" => flow::Dir::Out,
+            "in" | "inE" => flow::Dir::In,
+            _ => continue,
+        };
+        let flow = flow::at_args(&site.levels, Some(schema));
+        let Some(from) = flow.vertex_labels() else {
+            continue;
+        };
+        for arg in &call.args {
+            let Some(label) = &arg.string else { continue };
+            let triples: Vec<_> = schema
+                .triples
+                .iter()
+                .filter(|t| &t.label == label)
+                .collect();
+            if triples.is_empty() {
+                continue; // unknown labels are reported by schema_issues
+            }
+            let forward = triples.iter().any(|t| match dir {
+                flow::Dir::Out => from.contains(&t.out_label),
+                _ => from.contains(&t.in_label),
+            });
+            if forward {
+                continue;
+            }
+            let reverse = triples.iter().any(|t| match dir {
+                flow::Dir::Out => from.contains(&t.in_label),
+                _ => from.contains(&t.out_label),
+            });
+            let from_text = from.iter().cloned().collect::<Vec<_>>().join(", ");
+            let (message, replacement) = if reverse {
+                let other = match dir {
+                    flow::Dir::Out => call.name.replacen("out", "in", 1),
+                    _ => call.name.replacen("in", "out", 1),
+                };
+                (
+                    format!(
+                        "`{label}` edges point the other way for `{from_text}`: use {other}('{label}') instead of {}('{label}')",
+                        call.name
+                    ),
+                    Some(other),
+                )
+            } else {
+                (
+                    format!("No `{label}` edges touch `{from_text}` in the schema"),
+                    None,
+                )
+            };
+            out.push(SchemaIssue {
+                range: call.name_span.clone(),
+                message,
+                replacement,
+            });
+        }
+    }
+    out
+}
+
+/// Groovy closures (`{ it -> … }`) in `text`, by byte range.
+pub fn lambdas(text: &str) -> Vec<Range<usize>> {
+    scan::tokenize(text)
+        .into_iter()
+        .filter(|t| t.kind == scan::Tok::Other && text[t.span.clone()].starts_with('{'))
+        .map(|t| t.span)
+        .collect()
 }

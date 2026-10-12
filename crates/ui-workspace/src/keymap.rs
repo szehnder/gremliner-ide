@@ -33,6 +33,21 @@ pub fn bind_default_keys(cx: &mut App) {
         // Esc cancels only while a query runs, so the editor keeps its own Escape otherwise.
         KeyBinding::new("escape", CancelQuery, Some("QueryRunning")),
         KeyBinding::new("escape", CancelQuery, Some("QueryRunning > Input")),
+        KeyBinding::new(
+            "secondary-k",
+            ui_assistant::OpenPromptBar,
+            Some(EDITOR_INPUT),
+        ),
+        KeyBinding::new(
+            "secondary-k",
+            ui_assistant::OpenPromptBar,
+            Some("EditorPanel"),
+        ),
+        KeyBinding::new(
+            "escape",
+            ui_assistant::ClosePromptBar,
+            Some("PromptBar > Input"),
+        ),
         KeyBinding::new("secondary-enter", editor::RunQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("alt-enter", editor::RunQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("shift-alt-f", editor::FormatQuery, Some(EDITOR_INPUT)),

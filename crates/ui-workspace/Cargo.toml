@@ -15,6 +15,7 @@ storage.workspace = true
 providers.workspace = true
 schema.workspace = true
 llm.workspace = true
+assistant.workspace = true
 gpui-kit.workspace = true
 ui-theme.workspace = true
 tokio.workspace = true

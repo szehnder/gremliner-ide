@@ -294,7 +294,18 @@ impl Workspace {
         palette::open(self.command_context(window, cx), on_run, window, cx);
     }
 
-    fn open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<'_, Self>) {
+    /// The workspace of `window`, if its root view is one.
+    pub fn for_window(window: &Window, cx: &App) -> Option<Entity<Workspace>> {
+        let root = window.root::<gpui_kit::component::Root>()??;
+        root.read(cx).view().clone().downcast::<Workspace>().ok()
+    }
+
+    pub fn open_settings(
+        &mut self,
+        _: &OpenSettings,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
         let existing = self
             .dock
             .read(cx)

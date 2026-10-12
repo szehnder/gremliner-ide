@@ -10,4 +10,4 @@ pub mod language;
 mod tokens;
 
 pub use editor::{KEY_CONTEXT, QueryEditor, QueryEditorEvent};
-pub use language::{LANGUAGE_NAME, register};
+pub use language::{LANGUAGE_NAME, highlight_styles, register};

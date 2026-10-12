@@ -52,6 +52,15 @@ enum Cmd {
         #[arg(long)]
         check: bool,
     },
+    /// Run the assistant's golden prompts with an LLM profile against the testenv (needs the testenv
+    /// and a saved profile; the quality gate for nl-to-gremlin).
+    EvalAssistant {
+        #[arg(long)]
+        profile: String,
+        /// Exit non-zero below this pass rate.
+        #[arg(long, default_value_t = 0.9)]
+        min: f64,
+    },
     /// Regenerate the Gremlin tree-sitter parser (needs Node).
     Grammar {
         /// Also run the grammar's corpus tests.
@@ -86,6 +95,27 @@ fn main() -> Result<()> {
         Cmd::Testenv { cmd } => testenv::run(&root, cmd),
         Cmd::Bench { list, check } => bench(&root, list, check),
         Cmd::Grammar { test } => grammar::run(&root, test),
+        Cmd::EvalAssistant { profile, min } => {
+            let status = std::process::Command::new(env!("CARGO"))
+                .args([
+                    "run",
+                    "--release",
+                    "-q",
+                    "-p",
+                    "gremliner-cli",
+                    "--",
+                    "eval",
+                    "--profile",
+                ])
+                .arg(&profile)
+                .arg("--min")
+                .arg(min.to_string())
+                .status()?;
+            if !status.success() {
+                anyhow::bail!("assistant evaluation below {min}");
+            }
+            Ok(())
+        }
         Cmd::Screenshot {
             delay,
             out,

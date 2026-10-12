@@ -7,8 +7,13 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-assistant.workspace = true
 gpui-kit.workspace = true
+ui-theme.workspace = true
+ui-editor.workspace = true
+ui-results.workspace = true
+assistant.workspace = true
+llm.workspace = true
+gremlin-model.workspace = true
 
 [lints]
 workspace = true

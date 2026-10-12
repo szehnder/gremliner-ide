@@ -10,7 +10,9 @@ use gpui_kit::component::dock::{
     register_panel,
 };
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{
+    ActiveTheme as _, IconName, Sizable as _, WindowExt as _, h_flex, v_flex,
+};
 use gpui_kit::*;
 use storage::{Storage, TabRow};
 use ui_editor::{QueryEditor, QueryEditorEvent};
@@ -22,6 +24,7 @@ use crate::connections::ConnectionManager;
 use crate::connections::style::{color_tag_color, environment_badge};
 use crate::settings::AppSettings;
 use crate::theme::Tokens;
+use ui_assistant::{Disclosure, OpenPromptBar, PromptBar, PromptBarEvent};
 
 /// How long edits settle before a tab is written.
 const SAVE_DEBOUNCE: Duration = Duration::from_millis(500);
@@ -121,6 +124,9 @@ pub struct EditorPanel {
     dirty: bool,
     storage: Option<Storage>,
     save_task: Option<Task<()>>,
+    /// The assistant prompt bar, while open.
+    prompt: Option<Entity<PromptBar>>,
+    prompt_task: Option<Task<()>>,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -207,6 +213,8 @@ impl EditorPanel {
                 dirty: false,
                 storage,
                 save_task: None,
+                prompt: None,
+                prompt_task: None,
                 focus_handle: cx.focus_handle(),
                 _subscriptions: subscriptions,
             }
@@ -436,6 +444,15 @@ impl Render for EditorPanel {
             .child(self.connection_picker(cx))
             .child(div().flex_1())
             .child(
+                Button::new("editor-ask")
+                    .label("Ask")
+                    .icon(crate::assets::icons::IconName::Sparkles)
+                    .ghost()
+                    .xsmall()
+                    .tooltip("Describe what you want in plain English (Ctrl+K)")
+                    .on_click(cx.listener(|this, _, window, cx| this.open_prompt_bar(window, cx))),
+            )
+            .child(
                 Button::new("editor-format")
                     .label("Format")
                     .ghost()
@@ -460,10 +477,15 @@ impl Render for EditorPanel {
         v_flex()
             .id(SharedString::from(format!("editor-tab-{}", self.id)))
             .test_support()
+            .key_context("EditorPanel")
             .track_focus(&self.focus_handle)
             .size_full()
             .bg(theme.background)
+            .on_action(
+                cx.listener(|this, _: &OpenPromptBar, window, cx| this.open_prompt_bar(window, cx)),
+            )
             .child(toolbar)
+            .children(self.prompt.clone())
             .child(div().flex_1().min_h_0().child(self.editor.clone()))
     }
 }
@@ -481,4 +503,260 @@ pub fn register(cx: &mut App) {
         };
         panel_handle(tab)
     });
+}
+
+// ---- assistant prompt bar (nl-to-gremlin) ---------------------------------------------------------
+
+impl EditorPanel {
+    pub fn prompt_bar(&self) -> Option<&Entity<PromptBar>> {
+        self.prompt.as_ref()
+    }
+
+    /// The model and data disclosure for this tab's connection; `None` without an LLM profile.
+    fn disclosure(&self, cx: &App) -> Option<Disclosure> {
+        let profiles = crate::ai::LlmProfiles::try_global(cx)?;
+        let p = profiles.read(cx);
+        let profile = p.resolve(self.connection_id)?;
+        Some(Disclosure {
+            profile: profile.name.clone(),
+            local: profile.is_local(),
+            share_samples: self.connection_id.is_some_and(|c| p.share_samples(c)),
+        })
+    }
+
+    /// Show (or focus) the prompt bar.
+    pub fn open_prompt_bar(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let disclosure = self.disclosure(cx);
+        let bar = match &self.prompt {
+            Some(bar) => bar.clone(),
+            None => {
+                let bar = cx.new(|cx| PromptBar::new(window, cx));
+                let sub =
+                    cx.subscribe_in(&bar, window, |this, _, e: &PromptBarEvent, window, cx| {
+                        this.on_prompt_event(e.clone(), window, cx);
+                    });
+                self._subscriptions.push(sub);
+                self.prompt = Some(bar.clone());
+                bar
+            }
+        };
+        bar.update(cx, |b, cx| {
+            b.set_disclosure(disclosure, cx);
+            b.focus_input(window, cx);
+        });
+        cx.notify();
+    }
+
+    pub fn close_prompt_bar(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.prompt = None;
+        self.prompt_task = None;
+        self.editor.update(cx, |e, cx| e.focus(window, cx));
+        cx.notify();
+    }
+
+    fn on_prompt_event(
+        &mut self,
+        event: PromptBarEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        match event {
+            PromptBarEvent::Submit { prompt, history } => {
+                self.run_assistant(prompt, history, window, cx)
+            }
+            PromptBarEvent::Insert(query) => {
+                self.insert_statement(&query, window, cx);
+                self.close_prompt_bar(window, cx);
+            }
+            PromptBarEvent::Run { query, writes } => {
+                if writes {
+                    let this = cx.entity().downgrade();
+                    window.open_alert_dialog(cx, move |alert, _, cx| {
+                        let this = this.clone();
+                        let query = query.clone();
+                        alert
+                            .icon(gpui_kit::component::Icon::new(IconName::TriangleAlert).text_color(cx.theme().warning))
+                            .title("Run a query that writes data?")
+                            .description("The assistant wrote a query that changes the graph. It was not test-run.")
+                            .ok_text("Run it")
+                            .show_cancel(true)
+                            .on_ok(move |_, window, cx| {
+                                let _ = this.update(cx, |t, cx| t.insert_and_run(&query, window, cx));
+                                true
+                            })
+                    });
+                } else {
+                    self.insert_and_run(&query, window, cx);
+                }
+            }
+            PromptBarEvent::OpenSettings => {
+                // Directly rather than as an action: from a click, nothing in this tab may hold focus.
+                window.defer(cx, |window, cx| {
+                    if let Some(ws) = crate::Workspace::for_window(window, cx) {
+                        ws.update(cx, |ws, cx| {
+                            ws.open_settings(&crate::actions::OpenSettings, window, cx)
+                        });
+                    }
+                });
+            }
+            PromptBarEvent::Close => self.close_prompt_bar(window, cx),
+        }
+    }
+
+    /// Insert `query` on its own line after the cursor's line, selecting nothing, cursor inside it.
+    pub fn insert_statement(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let query = query.trim().to_owned();
+        self.editor.update(cx, |e, cx| {
+            let text = e.text(cx);
+            let cursor = e.cursor(cx).min(text.len());
+            let line_end = text[cursor..].find('\n').map_or(text.len(), |i| cursor + i);
+            let line_start = text[..cursor].rfind('\n').map_or(0, |i| i + 1);
+            let line_blank = text[line_start..line_end].trim().is_empty();
+            let (at, insert) = if line_blank {
+                (line_start, query.clone())
+            } else {
+                (line_end, format!("\n{query}"))
+            };
+            let end = if line_blank { line_end } else { at };
+            let caret = at + insert.len();
+            e.state().update(cx, |s, cx| {
+                s.set_selected_range(at..end, cx);
+                s.replace(insert, window, cx);
+                let pos = gpui_kit::component::input::RopeExt::offset_to_position(s.text(), caret);
+                s.set_cursor_position(pos, window, cx);
+            });
+        });
+    }
+
+    fn insert_and_run(&mut self, query: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.insert_statement(query, window, cx);
+        self.close_prompt_bar(window, cx);
+        // The editor re-analyses on its (deferred) change event; run once it has.
+        cx.defer_in(window, |this, window, cx| {
+            this.editor.update(cx, |e, cx| e.run(&RunQuery, window, cx));
+        });
+    }
+
+    fn run_assistant(
+        &mut self,
+        prompt: String,
+        history: Vec<llm::Message>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some(bar) = self.prompt.clone() else {
+            return;
+        };
+        let run_id = bar.read(cx).run_id();
+        let fail = |bar: &Entity<PromptBar>,
+                    msg: String,
+                    window: &mut Window,
+                    cx: &mut Context<'_, Self>| {
+            bar.update(cx, |b, cx| {
+                b.apply(run_id, assistant::PipelineEvent::Failed(msg), window, cx)
+            });
+        };
+        let Some(connection) = self.connection_id else {
+            fail(
+                &bar,
+                "Choose a connection for this tab first.".into(),
+                window,
+                cx,
+            );
+            return;
+        };
+        let Some(profiles) = crate::ai::LlmProfiles::try_global(cx) else {
+            return;
+        };
+        let Some(profile) = profiles.read(cx).resolve(Some(connection)).cloned() else {
+            fail(&bar, "No language model is configured.".into(), window, cx);
+            return;
+        };
+        let share_samples = profiles.read(cx).share_samples(connection);
+        let client_task = profiles.read(cx).client(profile, None, cx);
+        let manager = ConnectionManager::global(cx);
+        let schema = crate::schema::SchemaRegistry::try_global(cx)
+            .and_then(|r| r.read(cx).schema(connection));
+        let neptune = manager
+            .read(cx)
+            .get(connection)
+            .is_some_and(|c| c.provider.kind() == providers::ProviderKind::NeptuneAws);
+        let current_query = Some(self.editor.read(cx).text(cx)).filter(|t| !t.trim().is_empty());
+        let weak_bar = bar.downgrade();
+        self.prompt_task = Some(cx.spawn_in(window, async move |_, cx| {
+            if manager.read_with(cx, |m, _| m.session(connection).is_none()) {
+                manager.update(cx, |m, cx| m.connect(connection, cx)).await;
+            }
+            let Some(session) = manager.read_with(cx, |m, _| m.session(connection).cloned()) else {
+                let _ = weak_bar.update_in(cx, |b, window, cx| {
+                    b.apply(
+                        run_id,
+                        assistant::PipelineEvent::Failed(
+                            "Could not connect to the database.".into(),
+                        ),
+                        window,
+                        cx,
+                    )
+                });
+                return;
+            };
+            let client = match client_task.await {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = weak_bar.update_in(cx, |b, window, cx| {
+                        b.apply(
+                            run_id,
+                            assistant::PipelineEvent::Failed(e.to_string()),
+                            window,
+                            cx,
+                        )
+                    });
+                    return;
+                }
+            };
+            let ctx = assistant::Context {
+                schema,
+                dialect: assistant::Dialect {
+                    tinkerpop_version: session.info.tinkerpop_version.clone(),
+                    neptune,
+                },
+                current_query,
+                share_samples,
+            };
+            let (tx, mut rx) = futures::channel::mpsc::unbounded::<assistant::PipelineEvent>();
+            let work = cx.update(|_, cx| {
+                crate::io::spawn_io(cx, async move {
+                    let emit = move |e: assistant::PipelineEvent| {
+                        let _ = tx.unbounded_send(e);
+                    };
+                    assistant::run(
+                        &prompt,
+                        &history,
+                        &ctx,
+                        &client,
+                        Some(&session.client),
+                        &assistant::Options::default(),
+                        &emit,
+                    )
+                    .await
+                })
+            });
+            let Ok(work) = work else { return };
+            use futures::StreamExt as _;
+            while let Some(event) = rx.next().await {
+                if weak_bar
+                    .update_in(cx, |b, window, cx| b.apply(run_id, event, window, cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            let _ = work.await;
+        }));
+    }
 }

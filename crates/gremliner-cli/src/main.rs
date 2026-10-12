@@ -5,6 +5,7 @@ mod connections;
 mod lang;
 mod layout_bench;
 mod llm_cmd;
+mod nl_cmd;
 mod query;
 mod render_bench;
 mod schema_cmd;
@@ -59,6 +60,37 @@ enum Command {
     Connections {
         #[command(subcommand)]
         cmd: connections::Cmd,
+    },
+    /// Turn a natural-language request into a verified Gremlin query (exit 2 when not verified).
+    Nl {
+        /// A saved connection.
+        #[arg(long)]
+        conn: String,
+        /// An LLM profile (default: the connection's or the default profile).
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        json: bool,
+        /// Validate only; do not test-run the query.
+        #[arg(long)]
+        no_dry_run: bool,
+        prompt: String,
+    },
+    /// Run the assistant's golden prompts against the testenv and report the pass rate.
+    Eval {
+        #[arg(long)]
+        profile: String,
+        #[arg(
+            long,
+            env = "GREMLINER_URL",
+            default_value = "ws://localhost:8182/gremlin"
+        )]
+        url: String,
+        /// Exit 1 below this pass rate.
+        #[arg(long, default_value_t = 0.9)]
+        min: f64,
+        #[arg(long)]
+        json: bool,
     },
     /// Manage and test LLM profiles (shared with the app).
     Llm {
@@ -152,6 +184,38 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Connections { cmd } => connections::run(cmd, cli.data_dir, &runtime)?,
         Command::Llm { cmd } => llm_cmd::run(cmd, cli.data_dir, &runtime)?,
+        Command::Nl {
+            conn,
+            profile,
+            json,
+            no_dry_run,
+            prompt,
+        } => nl_cmd::nl(
+            nl_cmd::NlArgs {
+                conn,
+                profile,
+                json,
+                no_dry_run,
+                prompt,
+            },
+            cli.data_dir,
+            &runtime,
+        )?,
+        Command::Eval {
+            profile,
+            url,
+            min,
+            json,
+        } => nl_cmd::eval(
+            nl_cmd::EvalArgs {
+                profile,
+                url,
+                min,
+                json,
+            },
+            cli.data_dir,
+            &runtime,
+        )?,
         Command::LayoutBench {
             dataset,
             layout,
