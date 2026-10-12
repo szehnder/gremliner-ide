@@ -15,10 +15,11 @@ use gpui_kit::*;
 use storage::Storage;
 
 use crate::actions::*;
+use crate::connections::ConnectionManager;
 use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
 use crate::panels::{
     ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, InspectorPanel, ResultsPanel,
-    SettingsPanel, WelcomePanel, WorkspacePanel, confirm_reset_general,
+    SchemaGraphPanel, SettingsPanel, WelcomePanel, WorkspacePanel, confirm_reset_general,
 };
 use crate::perf_hud::PerfHud;
 use crate::persist::{self, LAYOUT_VERSION, LayoutProblem, WindowGeometry};
@@ -352,6 +353,45 @@ impl Workspace {
         });
     }
 
+    /// Show the schema graph of `connection` (default: the active connection), reusing its open tab.
+    pub fn open_schema_graph(
+        &mut self,
+        connection: Option<uuid::Uuid>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Option<Entity<SchemaGraphPanel>> {
+        let connection = connection.or_else(|| {
+            ConnectionManager::try_global(cx).and_then(|m| m.read(cx).active().map(|c| c.id))
+        })?;
+        let existing = self
+            .dock
+            .read(cx)
+            .layout(DockPlacement::Center)
+            .and_then(|tree| {
+                tree.panels().find_map(|id| {
+                    let panel = self.dock.read(cx).panel(id)?;
+                    let view = panel.view().downcast::<SchemaGraphPanel>().ok()?;
+                    (view.read(cx).connection() == Some(connection)).then_some((id, view))
+                })
+            });
+        if let Some((id, view)) = existing {
+            self.dock
+                .update(cx, |dock, cx| dock.select_panel(id, window, cx));
+            return Some(view);
+        }
+        let panel = SchemaGraphPanel::new(Some(connection), window, cx);
+        self.dock.update(cx, |dock, cx| {
+            dock.add_panel_view(
+                panel_handle(panel.clone()),
+                DockPlacement::Center,
+                None,
+                window,
+                cx,
+            );
+        });
+        Some(panel)
+    }
+
     /// Open a tab with `text` bound to `connection`, and run it (the `--run` flag).
     pub fn open_and_run(
         &mut self,
@@ -567,6 +607,23 @@ impl Render for Workspace {
                 this.new_tab(window, cx);
             }))
             .on_action(cx.listener(|this, _: &SplitRight, window, cx| this.split_right(window, cx)))
+            .on_action(cx.listener(|this, a: &OpenSchemaGraph, window, cx| {
+                this.open_schema_graph(a.connection, window, cx);
+            }))
+            .on_action(cx.listener(|this, a: &OpenSampleQuery, window, cx| {
+                this.open_and_run(&a.query, Some(a.connection), window, cx);
+            }))
+            .on_action(cx.listener(|_, a: &RefreshSchema, _, cx| {
+                let id = a.connection.or_else(|| {
+                    ConnectionManager::try_global(cx)
+                        .and_then(|m| m.read(cx).active().map(|c| c.id))
+                });
+                if let (Some(id), Some(registry)) =
+                    (id, crate::schema::SchemaRegistry::try_global(cx))
+                {
+                    registry.update(cx, |r, cx| r.refresh(id, cx));
+                }
+            }))
             .on_action(cx.listener(|_, _: &CancelQuery, _, cx| {
                 Runner::global(cx).update(cx, |r, cx| r.cancel(cx));
             }))

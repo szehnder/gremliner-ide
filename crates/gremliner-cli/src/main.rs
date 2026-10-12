@@ -6,6 +6,7 @@ mod lang;
 mod layout_bench;
 mod query;
 mod render_bench;
+mod schema_cmd;
 
 use clap::{Parser, Subcommand};
 
@@ -82,6 +83,30 @@ enum Command {
         json: bool,
         /// The Gremlin script.
         script: String,
+    },
+    /// Discover and print a graph's schema (labels, typed properties, counts, connections).
+    Schema {
+        /// A saved connection (its cached schema is updated too).
+        #[arg(long)]
+        conn: Option<String>,
+        /// Server WebSocket URL, when no `--conn` is given.
+        #[arg(
+            long,
+            env = "GREMLINER_URL",
+            default_value = "ws://localhost:8182/gremlin"
+        )]
+        url: String,
+        /// Server-side traversal source to bind to `g`, when no `--conn` is given.
+        #[arg(long)]
+        alias: Option<String>,
+        #[arg(long)]
+        json: bool,
+        /// Elements read per sampling query.
+        #[arg(long, default_value_t = 10_000)]
+        sample: u32,
+        /// Timeout per discovery query in milliseconds.
+        #[arg(long, default_value_t = 5_000)]
+        timeout_ms: u64,
     },
     /// Time a graph layout on a GraphML dataset (default: the testenv's air-routes).
     LayoutBench {
@@ -161,6 +186,25 @@ fn main() -> anyhow::Result<()> {
                 script,
             }))?;
         }
+        Command::Schema {
+            conn,
+            url,
+            alias,
+            json,
+            sample,
+            timeout_ms,
+        } => schema_cmd::run(
+            schema_cmd::Args {
+                conn,
+                url,
+                alias,
+                json,
+                sample,
+                timeout_ms,
+            },
+            cli.data_dir,
+            &runtime,
+        )?,
         Command::Version => println!("gremliner-cli {}", env!("CARGO_PKG_VERSION")),
         Command::RenderBench {
             nodes,

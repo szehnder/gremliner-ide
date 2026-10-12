@@ -8,6 +8,12 @@ license.workspace = true
 
 [dependencies]
 gremlin-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+futures.workspace = true
+
+[dev-dependencies]
+futures = { workspace = true, features = ["executor"] }
 
 [lints]
 workspace = true

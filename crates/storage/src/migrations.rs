@@ -44,6 +44,12 @@ const MIGRATIONS: &[&str] = &[
         json TEXT NOT NULL,
         updated_at INTEGER NOT NULL
     );",
+    // 5: the last discovered schema per connection (JSON, schema_version inside).
+    "CREATE TABLE schema_cache (
+        connection_id TEXT PRIMARY KEY NOT NULL,
+        discovered_at INTEGER NOT NULL,
+        json TEXT NOT NULL
+    );",
 ];
 
 /// The schema version after every migration has run.

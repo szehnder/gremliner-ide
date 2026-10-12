@@ -5818,6 +5818,7 @@ dependencies = [
  "gremlin-model",
  "gremlin-syntax",
  "log",
+ "schema",
  "serde",
  "serde_json",
  "storage",
@@ -6620,7 +6621,10 @@ dependencies = [
 name = "schema"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "gremlin-model",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8112,6 +8116,7 @@ dependencies = [
  "log",
  "nucleo-matcher",
  "providers",
+ "schema",
  "serde",
  "serde_json",
  "storage",

@@ -8,6 +8,7 @@ mod editor_tab;
 mod empty;
 mod inspector;
 mod results;
+mod schema_graph;
 mod settings_view;
 mod welcome;
 
@@ -19,6 +20,7 @@ pub use editor_tab::{EditorPanel, EditorTabs, EditorTabsEvent, RunRequest};
 pub use empty::empty_state;
 pub use inspector::InspectorPanel;
 pub use results::ResultsPanel;
+pub use schema_graph::SchemaGraphPanel;
 pub use settings_view::{SettingsPanel, confirm_reset_general};
 pub use welcome::WelcomePanel;
 
@@ -47,6 +49,7 @@ pub fn register_builtin(cx: &mut App) {
     register::<InspectorPanel>(cx);
     register::<SettingsPanel>(cx);
     editor_tab::register(cx);
+    schema_graph::register(cx);
 }
 
 /// Implements the boilerplate traits every simple panel needs.

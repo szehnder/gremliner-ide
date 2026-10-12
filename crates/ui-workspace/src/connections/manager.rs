@@ -88,6 +88,15 @@ impl ConnectionManager {
         cx.global::<ManagerGlobal>().0.clone()
     }
 
+    pub fn try_global(cx: &App) -> Option<Entity<Self>> {
+        cx.try_global::<ManagerGlobal>().map(|g| g.0.clone())
+    }
+
+    /// The app database (schema cache, connections).
+    pub fn storage(&self) -> &Storage {
+        self.store.storage()
+    }
+
     pub fn connections(&self) -> &[ConnectionConfig] {
         &self.connections
     }

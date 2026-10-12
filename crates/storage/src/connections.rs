@@ -87,6 +87,10 @@ fn save(conn: &mut Connection, row: &ConnectionRow) -> Result<()> {
 
 fn delete(conn: &mut Connection, id: &str) -> Result<()> {
     conn.execute("DELETE FROM connections WHERE id = ?1", params![id])?;
+    conn.execute(
+        "DELETE FROM schema_cache WHERE connection_id = ?1",
+        params![id],
+    )?;
     Ok(())
 }
 

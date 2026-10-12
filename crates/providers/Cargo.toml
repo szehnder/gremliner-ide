@@ -10,6 +10,7 @@ license.workspace = true
 gremlin-client.workspace = true
 gremlin-model.workspace = true
 gremlin-syntax.workspace = true
+schema.workspace = true
 storage.workspace = true
 tokio.workspace = true
 futures.workspace = true

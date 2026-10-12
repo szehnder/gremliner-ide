@@ -148,3 +148,17 @@ Lessons learned while building with gpui-kit 0.7.x (`gpui-pre` 0.3.x). Add to th
   ("cannot read X while it is already being updated"); defer with `cx.defer_in(window, ..)`.
 - The design-token check matches substrings such as `rgb(` and `hsla(` anywhere on a line, including in
   function names; keep colour helpers in a `theme.rs` module and name them without those substrings.
+
+## Actions that carry data
+
+`actions!` only declares unit actions. For data (e.g. a connection id plus a query), derive it:
+`#[derive(Clone, PartialEq, Debug, gpui_kit::Action)] #[action(namespace = workspace, no_json)]`.
+`no_json` drops the `Deserialize`/`JsonSchema` requirement, so such actions cannot be bound in keymap JSON. A
+palette entry needs `Default`. Panels dispatch them with `window.dispatch_action(Box::new(..), cx)`, and the
+workspace handles them in `on_action`.
+
+## Finding an open panel of a given type
+
+`dock.read(cx).layout(DockPlacement::Center)?.panels()` yields `PanelId`s. Then
+`dock.read(cx).panel(id)?.view().downcast::<MyPanel>()` returns the `Entity` to inspect, for example to reuse
+a tab, and `dock.select_panel(id, window, cx)` focuses it.

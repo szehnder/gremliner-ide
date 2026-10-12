@@ -13,6 +13,7 @@ pub mod panels;
 pub mod perf_hud;
 pub mod persist;
 pub mod run;
+pub mod schema;
 pub mod settings;
 pub mod status_bar;
 pub mod styles;
@@ -74,6 +75,7 @@ pub fn init(config: ShellConfig, cx: &mut App) {
     if let Some(db) = connection_db {
         connections::ConnectionManager::init(db, config.secrets, cx);
     }
+    schema::SchemaRegistry::init(cx);
     AppSettings::init(general, config.storage, cx);
     styles::init(cx);
 }
@@ -99,6 +101,14 @@ fn register_commands(cx: &mut App) {
             .keywords(&["keymap", "bindings"]),
         CommandMeta::new("Connection", "Add Connection", AddConnection)
             .keywords(&["new", "connect"]),
+        CommandMeta::new(
+            "Connection",
+            "Open Schema Graph",
+            OpenSchemaGraph::default(),
+        )
+        .keywords(&["labels", "model"]),
+        CommandMeta::new("Connection", "Refresh Schema", RefreshSchema::default())
+            .keywords(&["discover", "labels"]),
         CommandMeta::new("Editor", "New Query Tab", NewQueryTab).keywords(&["editor", "open"]),
         CommandMeta::new("Editor", "Run Query", editor::RunQuery)
             .when(When::EditorOpen)

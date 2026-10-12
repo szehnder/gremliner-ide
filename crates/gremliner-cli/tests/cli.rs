@@ -180,3 +180,62 @@ fn fmt_and_parse_work_on_stdin() {
         serde_json::json!(["code"])
     );
 }
+
+#[test]
+fn scenario_schema_discovery_cli_schema_json() {
+    if !testenv_up() {
+        eprintln!("SKIPPED: testenv not reachable");
+        return;
+    }
+    let data = std::env::temp_dir().join(format!("gremliner-cli-schema-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data);
+    let added = cli(
+        &data,
+        &[
+            "connections",
+            "add",
+            "--name",
+            "Modern",
+            "--url",
+            "ws://localhost:8182/gremlin",
+            "--alias",
+            "gModern",
+        ],
+    );
+    assert!(added.status.success());
+    let out = cli(&data, &["schema", "--conn", "Modern", "--json"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("valid JSON");
+    let names = |key: &str| -> Vec<String> {
+        v[key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(names("vertex_labels"), ["person", "software"]);
+    assert_eq!(names("edge_labels"), ["created", "knows"]);
+    let person = &v["vertex_labels"][0];
+    assert!(
+        person["properties"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["key"] == "age" && p["types"] == serde_json::json!(["Int32"]))
+    );
+    assert!(
+        v["triples"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!({"out": "person", "label": "knows", "in": "person"}))
+    );
+    // The text form works too.
+    let text = cli(&data, &["schema", "--conn", "Modern"]);
+    assert!(String::from_utf8_lossy(&text.stdout).contains("(person)-[knows]->(person)"));
+    let _ = std::fs::remove_dir_all(&data);
+}

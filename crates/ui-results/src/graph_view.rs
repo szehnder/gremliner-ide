@@ -291,6 +291,8 @@ pub struct GraphView {
     matches: Vec<NodeIx>,
     match_ix: usize,
     edit: edit::EditState,
+    /// Not backed by a connection (e.g. the schema graph): no follow-up queries and no edits.
+    offline: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -381,8 +383,19 @@ impl GraphView {
             matches: Vec::new(),
             match_ix: 0,
             edit: edit::EditState::new(window, cx),
+            offline: false,
             _subscriptions: subscriptions,
         }
+    }
+
+    /// Offline graphs never ask the host for follow-up queries and offer no editing.
+    pub fn set_offline(&mut self, offline: bool, cx: &mut Context<'_, Self>) {
+        self.offline = offline;
+        cx.notify();
+    }
+
+    pub fn is_offline(&self) -> bool {
+        self.offline
     }
 
     pub fn canvas(&self) -> &Entity<GraphCanvas> {
@@ -746,6 +759,9 @@ impl GraphView {
     }
 
     fn emit_fetch(&mut self, kind: FetchKind, script: String, cx: &mut Context<'_, Self>) {
+        if self.offline {
+            return;
+        }
         self.pending += 1;
         cx.emit(GraphViewEvent::Fetch(FetchRequest {
             generation: self.generation,
@@ -1677,8 +1693,16 @@ fn context_menu(
             .collect();
         (node.is_some_and(|n| g.has_flag(n, flags::PINNED)), labels)
     };
+    let offline = view.upgrade().is_some_and(|v| v.read(cx).offline);
     let mut menu = menu.action_context(focus);
-    if let Some(n) = node {
+    if node.is_some() && offline {
+        menu = menu
+            .menu("Select neighbours", Box::new(SelectNeighbours))
+            .menu("Hide", Box::new(HideSelection))
+            .when(pinned, |m| m.menu("Unpin", Box::new(UnpinSelection)))
+            .when(!pinned, |m| m.menu("Pin", Box::new(PinSelection)))
+            .separator();
+    } else if let Some(n) = node {
         let item_view = view.clone();
         let expand_item = move |label: String, direction: ExpandDirection, edge: Option<String>| {
             let view = item_view.clone();
@@ -1745,7 +1769,7 @@ fn context_menu(
             })
             .separator();
     }
-    menu.menu("New vertex…", Box::new(NewVertex))
+    menu.when(!offline, |m| m.menu("New vertex…", Box::new(NewVertex)))
         .menu("Select all", Box::new(SelectAll))
         .menu("Unhide all", Box::new(UnhideAll))
         .menu("Fit to view", Box::new(FitGraph))

@@ -493,6 +493,20 @@ impl Runner {
             drop(io);
             result.update(cx, |r, cx| r.finish(RunStatus::Cancelled, cx));
             let _ = this.update(cx, |this, cx| this.clear_running(run_id, cx));
+            let labels = result.read_with(cx, |r, _| result_labels(&r.items));
+            if !labels.is_empty() {
+                let _ = cx.update(|_, cx| {
+                    if let Some(registry) = crate::schema::SchemaRegistry::try_global(cx) {
+                        registry.update(cx, |reg, cx| {
+                            reg.note_result_labels(
+                                connection_id,
+                                labels.iter().map(String::as_str),
+                                cx,
+                            );
+                        });
+                    }
+                });
+            }
             let error_range = result.read_with(cx, |r, _| match &r.status {
                 RunStatus::Failed(e) => e.range.clone(),
                 _ => None,
@@ -567,6 +581,25 @@ async fn stream(
 }
 
 /// `ui_state` key of a tab's graph layout settings.
+/// Distinct element labels in (the first part of) a result, for the schema's unknown-label check.
+fn result_labels(items: &[GValue]) -> Vec<String> {
+    const SCAN: usize = 5_000;
+    let items = &items[..items.len().min(SCAN)];
+    if !gremlin_model::elements::has_graph_elements(items) {
+        return Vec::new();
+    }
+    let set = gremlin_model::elements::elements(items);
+    let mut labels: Vec<String> = set
+        .vertices
+        .iter()
+        .map(|v| v.label.clone())
+        .chain(set.edges.iter().map(|e| e.label.clone()))
+        .collect();
+    labels.sort();
+    labels.dedup();
+    labels
+}
+
 pub fn layout_key(tab: Uuid) -> String {
     format!("graph.layout.{tab}")
 }

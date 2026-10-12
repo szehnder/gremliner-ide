@@ -13,6 +13,7 @@ graph-store.workspace = true
 ui-assistant.workspace = true
 storage.workspace = true
 providers.workspace = true
+schema.workspace = true
 gpui-kit.workspace = true
 ui-theme.workspace = true
 tokio.workspace = true

@@ -67,7 +67,7 @@ impl From<EnvArg> for Environment {
     }
 }
 
-fn open_store(data_dir: Option<PathBuf>) -> Result<ConnectionStore> {
+pub fn open_store(data_dir: Option<PathBuf>) -> Result<ConnectionStore> {
     let dir = data_dir
         .or_else(Storage::default_data_dir)
         .context("no data directory; pass --data-dir")?;

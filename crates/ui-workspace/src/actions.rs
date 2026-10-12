@@ -39,3 +39,25 @@ pub mod graph {
 pub mod editor {
     pub use ui_editor::actions::{FormatQuery, RunQuery, ToggleLineComment};
 }
+
+/// Open a new tab bound to `connection` with `query`, and run it (the schema browser's "Sample 25").
+#[derive(Clone, PartialEq, Debug, gpui_kit::Action)]
+#[action(namespace = workspace, no_json)]
+pub struct OpenSampleQuery {
+    pub connection: uuid::Uuid,
+    pub query: String,
+}
+
+/// Open the schema graph of `connection` (the active connection when `None`).
+#[derive(Clone, PartialEq, Debug, Default, gpui_kit::Action)]
+#[action(namespace = workspace, no_json)]
+pub struct OpenSchemaGraph {
+    pub connection: Option<uuid::Uuid>,
+}
+
+/// Re-discover the schema of the active connection.
+#[derive(Clone, PartialEq, Debug, Default, gpui_kit::Action)]
+#[action(namespace = workspace, no_json)]
+pub struct RefreshSchema {
+    pub connection: Option<uuid::Uuid>,
+}

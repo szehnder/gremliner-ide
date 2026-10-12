@@ -7,6 +7,7 @@ pub mod error;
 pub mod gremlin_server;
 pub mod provider;
 pub mod read_only;
+pub mod schema;
 pub mod store;
 
 pub use config::{

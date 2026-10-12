@@ -71,6 +71,11 @@ impl ConnectionStore {
         Self { storage, secrets }
     }
 
+    /// The app database this store reads and writes.
+    pub fn storage(&self) -> &Storage {
+        &self.storage
+    }
+
     pub fn secrets_persist(&self) -> bool {
         self.secrets.is_persistent()
     }

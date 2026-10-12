@@ -7,10 +7,12 @@
 
 mod connections;
 mod migrations;
+mod schema_cache;
 pub mod secrets;
 mod stylesheets;
 mod tabs;
 
+pub use schema_cache::CachedSchema;
 pub use stylesheets::StylesheetRow;
 
 pub use connections::ConnectionRow;

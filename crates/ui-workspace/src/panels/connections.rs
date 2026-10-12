@@ -12,15 +12,25 @@ use gpui_kit::*;
 use providers::ConnectionConfig;
 use uuid::Uuid;
 
+use std::collections::HashSet;
+
+use schema::{LabelInfo, Schema};
+
 use super::{WorkspacePanel, empty_state, panel_basics};
 use crate::actions::AddConnection;
+use crate::actions::{OpenSampleQuery, OpenSchemaGraph};
 use crate::connections::style::{color_tag_color, environment_badge, status_dot};
 use crate::connections::{ConnStatus, ConnectionManager, form};
+use crate::schema::SchemaRegistry;
 use crate::theme::Tokens;
 
 pub struct ConnectionsPanel {
     focus_handle: FocusHandle,
     search: Entity<InputState>,
+    /// Schema tree nodes the user opened (`<connection>/v`, `<connection>/v/<label>`, …).
+    expanded: HashSet<String>,
+    /// Connections whose schema tree the user collapsed (open by default).
+    schema_collapsed: HashSet<Uuid>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -34,7 +44,7 @@ impl WorkspacePanel for ConnectionsPanel {
         cx.new(|cx| {
             let search = cx.new(|cx| InputState::new(window, cx).placeholder("Search connections"));
             let manager = ConnectionManager::global(cx);
-            let subscriptions = vec![
+            let mut subscriptions = vec![
                 cx.observe(&manager, |_, _, cx| cx.notify()),
                 cx.subscribe(&search, |_, _, event: &InputEvent, cx| {
                     if matches!(event, InputEvent::Change) {
@@ -42,9 +52,14 @@ impl WorkspacePanel for ConnectionsPanel {
                     }
                 }),
             ];
+            if let Some(registry) = SchemaRegistry::try_global(cx) {
+                subscriptions.push(cx.observe(&registry, |_, _, cx| cx.notify()));
+            }
             Self {
                 focus_handle: cx.focus_handle(),
                 search,
+                expanded: HashSet::new(),
+                schema_collapsed: HashSet::new(),
                 _subscriptions: subscriptions,
             }
         })
@@ -345,7 +360,11 @@ impl Render for ConnectionsPanel {
                 .py(Tokens::space(1.0))
                 .children(visible.into_iter().map(|(config, status)| {
                     let is_active = active == Some(config.id);
-                    self.row(&config, status, is_active, cx).into_any_element()
+                    let connected = matches!(status, ConnStatus::Connected(_));
+                    v_flex()
+                        .child(self.row(&config, status, is_active, cx))
+                        .when(connected, |col| col.children(self.schema_tree(&config, cx)))
+                        .into_any_element()
                 }))
                 .when(none_match, |list| {
                     list.child(
@@ -357,5 +376,353 @@ impl Render for ConnectionsPanel {
                     )
                 }),
         )
+    }
+}
+
+/// How many elements "Sample" opens.
+pub const SAMPLE_SIZE: usize = 25;
+
+/// `g.V().hasLabel('airport').limit(25)` (or `g.E()` for edge labels).
+pub fn sample_query(label: &str, vertices: bool) -> String {
+    let escaped = label.replace('\\', "\\\\").replace('\'', "\\'");
+    let source = if vertices { "V" } else { "E" };
+    format!("g.{source}().hasLabel('{escaped}').limit({SAMPLE_SIZE})")
+}
+
+/// "just now", "5 min ago", "3 h ago", "2 days ago".
+fn age_text(discovered_at_ms: i64) -> String {
+    let now = providers::schema::now_ms();
+    let secs = (now - discovered_at_ms).max(0) / 1000;
+    match secs {
+        0..60 => "just now".into(),
+        60..3600 => format!("{} min ago", secs / 60),
+        3600..86_400 => format!("{} h ago", secs / 3600),
+        _ => format!("{} days ago", secs / 86_400),
+    }
+}
+
+impl ConnectionsPanel {
+    fn toggle(&mut self, key: String, cx: &mut Context<'_, Self>) {
+        if !self.expanded.remove(&key) {
+            self.expanded.insert(key);
+        }
+        cx.notify();
+    }
+
+    /// The schema under a connected connection: a header with status and actions, then vertex and edge
+    /// labels with counts, each opening to its properties.
+    fn schema_tree(
+        &self,
+        config: &ConnectionConfig,
+        cx: &mut Context<'_, Self>,
+    ) -> Option<AnyElement> {
+        let registry = SchemaRegistry::try_global(cx)?;
+        let entry = registry
+            .read(cx)
+            .entry(config.id)
+            .cloned()
+            .unwrap_or_default();
+        let theme = cx.theme().clone();
+        let id = config.id;
+        let slug = slug(&config.name);
+        let open = !self.schema_collapsed.contains(&id);
+        let status = match (&entry.schema, entry.refreshing) {
+            (_, true) => "Discovering\u{2026}".to_owned(),
+            (Some(s), false) if s.partial.any() => {
+                format!("Partial \u{b7} {}", age_text(s.discovered_at_ms))
+            }
+            (Some(s), false) => age_text(s.discovered_at_ms),
+            (None, false) => "Not discovered".to_owned(),
+        };
+        let small_button = |name: String, icon: IconName, tip: &'static str| {
+            Button::new(SharedString::from(name))
+                .icon(icon)
+                .ghost()
+                .xsmall()
+                .tooltip(tip)
+        };
+        let header = h_flex()
+            .id(SharedString::from(format!("schema-header-{slug}")))
+            .test_support()
+            .gap(Tokens::space(1.0))
+            .pl(Tokens::space(5.0))
+            .pr(Tokens::space(2.0))
+            .py(Tokens::space(0.5))
+            .mx(Tokens::space(1.0))
+            .rounded(Tokens::RADIUS_MD)
+            .cursor_pointer()
+            .hover(|s| s.bg(theme.sidebar_accent))
+            .text_size(Tokens::text_xs())
+            .on_click(cx.listener(move |this, _, _, cx| {
+                if !this.schema_collapsed.remove(&id) {
+                    this.schema_collapsed.insert(id);
+                }
+                cx.notify();
+            }))
+            .child(
+                Icon::new(if open {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronRight
+                })
+                .xsmall()
+                .text_color(theme.muted_foreground),
+            )
+            .child(
+                div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(theme.sidebar_foreground)
+                    .child("Schema"),
+            )
+            .child(
+                div()
+                    .id(SharedString::from(format!("schema-status-{slug}")))
+                    .test_support()
+                    .flex_1()
+                    .truncate()
+                    .text_color(theme.muted_foreground)
+                    .child(status),
+            )
+            .child(
+                small_button(
+                    format!("schema-refresh-{slug}"),
+                    IconName::RefreshCw,
+                    "Refresh schema",
+                )
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    cx.stop_propagation();
+                    if let Some(registry) = SchemaRegistry::try_global(cx) {
+                        registry.update(cx, |r, cx| r.refresh(id, cx));
+                    }
+                })),
+            )
+            .child(
+                small_button(
+                    format!("schema-graph-{slug}"),
+                    IconName::Network,
+                    "Open schema graph",
+                )
+                .on_click(move |_, window, cx| {
+                    cx.stop_propagation();
+                    window.dispatch_action(
+                        Box::new(OpenSchemaGraph {
+                            connection: Some(id),
+                        }),
+                        cx,
+                    );
+                }),
+            );
+        let mut col = v_flex()
+            .id(SharedString::from(format!("schema-tree-{slug}")))
+            .child(header);
+        if open && let Some(schema) = &entry.schema {
+            col = col
+                .child(self.label_group(config, schema, true, cx))
+                .child(self.label_group(config, schema, false, cx));
+        }
+        Some(col.into_any_element())
+    }
+
+    fn label_group(
+        &self,
+        config: &ConnectionConfig,
+        schema: &Schema,
+        vertices: bool,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement {
+        let theme = cx.theme().clone();
+        let slug = slug(&config.name);
+        let kind = if vertices { "v" } else { "e" };
+        let key = format!("{}/{kind}", config.id);
+        // Groups are open unless the user closed them.
+        let open = !self.expanded.contains(&format!("{key}/closed"));
+        let labels: &[LabelInfo] = if vertices {
+            &schema.vertex_labels
+        } else {
+            &schema.edge_labels
+        };
+        let title = if vertices {
+            "Vertex labels"
+        } else {
+            "Edge labels"
+        };
+        let toggle_key = format!("{key}/closed");
+        let mut col = v_flex().child(
+            h_flex()
+                .id(SharedString::from(format!("schema-group-{slug}-{kind}")))
+                .gap(Tokens::space(1.0))
+                .pl(Tokens::space(7.0))
+                .py(Tokens::space(0.5))
+                .mx(Tokens::space(1.0))
+                .rounded(Tokens::RADIUS_MD)
+                .cursor_pointer()
+                .hover(|s| s.bg(theme.sidebar_accent))
+                .text_size(Tokens::text_xs())
+                .text_color(theme.muted_foreground)
+                .on_click(cx.listener(move |this, _, _, cx| this.toggle(toggle_key.clone(), cx)))
+                .child(
+                    Icon::new(if open {
+                        IconName::ChevronDown
+                    } else {
+                        IconName::ChevronRight
+                    })
+                    .xsmall(),
+                )
+                .child(format!("{title} ({})", labels.len())),
+        );
+        if !open {
+            return col;
+        }
+        for label in labels {
+            col = col.child(self.label_row(config, label, vertices, cx));
+        }
+        col
+    }
+
+    fn label_row(
+        &self,
+        config: &ConnectionConfig,
+        label: &LabelInfo,
+        vertices: bool,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement {
+        let theme = cx.theme().clone();
+        let id = config.id;
+        let slug = slug(&config.name);
+        let kind = if vertices { "v" } else { "e" };
+        let label_slug = self::slug(&label.name);
+        let key = format!("{id}/{kind}/{}", label.name);
+        let open = self.expanded.contains(&key);
+        let group = SharedString::from(format!("schema-label-group-{slug}-{kind}-{label_slug}"));
+        let query = sample_query(&label.name, vertices);
+        let toggle_key = key.clone();
+        let row = h_flex()
+            .id(SharedString::from(format!(
+                "schema-label-{slug}-{kind}-{label_slug}"
+            )))
+            .test_support()
+            .group(group.clone())
+            .relative()
+            .gap(Tokens::space(1.0))
+            .pl(Tokens::space(9.0))
+            .pr(Tokens::space(2.0))
+            .py(Tokens::space(0.5))
+            .mx(Tokens::space(1.0))
+            .rounded(Tokens::RADIUS_MD)
+            .cursor_pointer()
+            .hover(|s| s.bg(theme.sidebar_accent))
+            .text_size(Tokens::text_sm())
+            .on_click(cx.listener(move |this, _, _, cx| this.toggle(toggle_key.clone(), cx)))
+            .child(
+                Icon::new(if open {
+                    IconName::ChevronDown
+                } else {
+                    IconName::ChevronRight
+                })
+                .xsmall()
+                .text_color(theme.muted_foreground),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .truncate()
+                    .text_color(theme.sidebar_foreground)
+                    .child(label.name.clone()),
+            )
+            .children(label.count.map(|c| {
+                div()
+                    .text_size(Tokens::text_xs())
+                    .text_color(theme.muted_foreground)
+                    .child(c.text())
+            }))
+            .child(
+                h_flex()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .right(Tokens::space(1.0))
+                    .pl(Tokens::space(2.0))
+                    .bg(theme.sidebar_accent)
+                    .invisible()
+                    .group_hover(group, |s| s.visible())
+                    .child(
+                        Button::new(SharedString::from(format!(
+                            "schema-sample-{slug}-{kind}-{label_slug}"
+                        )))
+                        .label(format!("Sample {SAMPLE_SIZE}"))
+                        .ghost()
+                        .xsmall()
+                        .tooltip("Open a sample query in a new tab")
+                        .on_click(move |_, window, cx| {
+                            cx.stop_propagation();
+                            window.dispatch_action(
+                                Box::new(OpenSampleQuery {
+                                    connection: id,
+                                    query: query.clone(),
+                                }),
+                                cx,
+                            );
+                        }),
+                    ),
+            );
+        let mut col = v_flex().child(row);
+        if open {
+            for p in &label.properties {
+                let multi = if p.cardinality == schema::Cardinality::Multi {
+                    " \u{b7} multi"
+                } else {
+                    ""
+                };
+                let samples = if p.samples.is_empty() {
+                    None
+                } else {
+                    Some(format!("e.g. {}", p.samples.join(", ")))
+                };
+                col = col.child(
+                    h_flex()
+                        .id(SharedString::from(format!(
+                            "schema-prop-{slug}-{kind}-{label_slug}-{}",
+                            self::slug(&p.key)
+                        )))
+                        .test_support()
+                        .gap(Tokens::space(2.0))
+                        .pl(Tokens::space(13.0))
+                        .pr(Tokens::space(2.0))
+                        .py(Tokens::space(0.25))
+                        .text_size(Tokens::text_xs())
+                        .child(
+                            div()
+                                .truncate()
+                                .text_color(theme.sidebar_foreground)
+                                .child(p.key.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_color(theme.muted_foreground)
+                                .child(format!("{}{multi}", p.type_text())),
+                        )
+                        .children(samples.map(|s| {
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .text_color(theme.muted_foreground)
+                                .child(s)
+                        })),
+                );
+            }
+            if label.properties.is_empty() {
+                col = col.child(
+                    div()
+                        .pl(Tokens::space(13.0))
+                        .py(Tokens::space(0.25))
+                        .text_size(Tokens::text_xs())
+                        .text_color(theme.muted_foreground)
+                        .child("No properties"),
+                );
+            }
+        }
+        col
     }
 }

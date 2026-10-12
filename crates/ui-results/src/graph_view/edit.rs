@@ -346,6 +346,9 @@ impl GraphView {
         kind: ProposalKind,
         cx: &mut Context<'_, Self>,
     ) {
+        if self.offline {
+            return;
+        }
         let id = self.edit.next_id;
         self.edit.next_id += 1;
         let before = self.before_values(&command);
@@ -638,6 +641,9 @@ impl GraphView {
 
     /// Ask for the label of an edge from `from` to `to` (after an Alt-drag).
     pub fn start_link(&mut self, from: NodeIx, to: NodeIx, cx: &mut Context<'_, Self>) {
+        if self.offline {
+            return;
+        }
         self.edit.link = Some((from, to));
         self.edit.proposal = None;
         cx.notify();
@@ -678,6 +684,9 @@ impl GraphView {
 
     /// Open the new-vertex form.
     pub fn start_new_vertex(&mut self, cx: &mut Context<'_, Self>) {
+        if self.offline {
+            return;
+        }
         self.edit.new_vertex = true;
         self.edit.proposal = None;
         cx.notify();
