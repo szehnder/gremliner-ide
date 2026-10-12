@@ -1,4 +1,4 @@
-//! The results dock content: summary bar, view switcher (Table / JSON / Console), error view.
+//! The results dock content: summary bar, view switcher (Graph / Table / JSON / Console), error view.
 
 use std::time::{Duration, Instant};
 
@@ -11,6 +11,7 @@ use gremlin_model::normalize::PreferredView;
 use ui_theme::Tokens;
 
 use crate::console_view::ConsoleView;
+use crate::graph_view::{GraphView, GraphViewEvent};
 use crate::json_view::JsonView;
 use crate::result_set::{ResultSet, RunStatus};
 use crate::table_view::TableView;
@@ -20,6 +21,7 @@ const STREAM_REFRESH: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewKind {
+    Graph,
     Table,
     Json,
     Console,
@@ -28,6 +30,7 @@ pub enum ViewKind {
 impl From<PreferredView> for ViewKind {
     fn from(v: PreferredView) -> Self {
         match v {
+            PreferredView::Graph => ViewKind::Graph,
             PreferredView::Table => ViewKind::Table,
             PreferredView::Json => ViewKind::Json,
             PreferredView::Console => ViewKind::Console,
@@ -48,6 +51,9 @@ pub struct ResultsView {
     table: Option<Entity<TableView>>,
     json: Option<Entity<JsonView>>,
     console: Option<Entity<ConsoleView>>,
+    /// The tab's graph (kept across runs so results can accumulate).
+    graph: Option<Entity<GraphView>>,
+    _graph_subscription: Option<Subscription>,
     /// Items count the views were last built from.
     built_for: Option<(u64, usize)>,
     /// When the last refresh finished, and how long it took (the stream throttle adapts to it).
@@ -68,6 +74,8 @@ impl Default for ResultsView {
             table: None,
             json: None,
             console: None,
+            graph: None,
+            _graph_subscription: None,
             built_for: None,
             last_refresh: None,
             refresh_cost: Duration::ZERO,
@@ -102,6 +110,43 @@ impl ResultsView {
         self.console.as_ref()
     }
 
+    pub fn graph(&self) -> Option<&Entity<GraphView>> {
+        self.graph.as_ref()
+    }
+
+    /// Use `graph` (the editor tab's graph) for the Graph view. Without one, the view makes its own.
+    pub fn set_graph(
+        &mut self,
+        graph: Entity<GraphView>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if self.graph.as_ref() == Some(&graph) {
+            return;
+        }
+        self._graph_subscription = Some(cx.subscribe_in(
+            &graph,
+            window,
+            |this, _, event: &GraphViewEvent, window, cx| {
+                if let GraphViewEvent::ShowInTable(id) = event {
+                    this.show_in_table(id, window, cx);
+                }
+            },
+        ));
+        self.graph = Some(graph);
+        cx.notify();
+    }
+
+    /// Switch to the Table view filtered to `text` (e.g. an element id).
+    pub fn show_in_table(&mut self, text: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.set_view(ViewKind::Table, window, cx);
+        if let Some(table) = &self.table {
+            let input = table.read(cx).filter_input().clone();
+            let text = text.to_owned();
+            input.update(cx, |s, cx| s.set_value(text, window, cx));
+            table.update(cx, |t, cx| t.apply_filter_input(cx));
+        }
+    }
     /// Show a (new) result. Views are rebuilt from scratch, so nothing from a previous run remains.
     pub fn set_result(
         &mut self,
@@ -166,9 +211,9 @@ impl ResultsView {
             cx.notify();
             return;
         };
-        let (run_id, count, shape) = {
+        let (run_id, count, shape, finished) = {
             let r = result.read(cx);
-            (r.run_id, r.items.len(), r.shape())
+            (r.run_id, r.items.len(), r.shape(), !r.is_running())
         };
         if !self.view_pinned && count > 0 {
             self.view = shape.preferred_view().into();
@@ -188,6 +233,18 @@ impl ResultsView {
             (std::mem::take(&mut r.items), std::mem::take(&mut r.raw))
         });
         match self.view {
+            ViewKind::Graph => {
+                let graph = match &self.graph {
+                    Some(g) => g.clone(),
+                    None => {
+                        let g = cx.new(|cx| GraphView::new(window, cx));
+                        self.set_graph(g.clone(), window, cx);
+                        g
+                    }
+                };
+                // Idempotent: only items not yet merged are merged; follow-ups run once per run.
+                graph.update(cx, |g, cx| g.ingest(run_id, &items, finished, cx));
+            }
             ViewKind::Table => match &self.table {
                 Some(t) if stale => t.update(cx, |t, cx| t.set_items(&items, window, cx)),
                 Some(_) => {}
@@ -320,6 +377,13 @@ impl ResultsView {
             })
             .child(div().flex_1())
             .child(view_button(
+                "view-graph",
+                "Graph",
+                ViewKind::Graph,
+                self.view,
+                cx,
+            ))
+            .child(view_button(
                 "view-table",
                 "Table",
                 ViewKind::Table,
@@ -414,6 +478,7 @@ impl Render for ResultsView {
             error
         } else {
             match self.view {
+                ViewKind::Graph => self.graph.clone().map(|g| g.into_any_element()),
                 ViewKind::Table => self.table.clone().map(|t| t.into_any_element()),
                 ViewKind::Json => self.json.clone().map(|j| j.into_any_element()),
                 ViewKind::Console => self.console.clone().map(|c| c.into_any_element()),

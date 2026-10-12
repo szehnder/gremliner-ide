@@ -246,7 +246,7 @@ impl Workspace {
             .update(cx, |dock, cx| dock.toggle_dock(placement, window, cx));
     }
 
-    fn command_context(&self, cx: &App) -> CommandContext {
+    fn command_context(&self, window: &Window, cx: &App) -> CommandContext {
         let manager = crate::connections::ConnectionManager::global(cx);
         let connected = manager.read(cx).active().is_some_and(|c| {
             matches!(
@@ -257,6 +257,7 @@ impl Workspace {
         CommandContext {
             editor_open: EditorTabs::global(cx).read(cx).any_open(),
             connected,
+            graph_focused: window.is_action_available(&graph::HideSelection, cx),
         }
     }
 
@@ -289,7 +290,7 @@ impl Workspace {
                 window.dispatch_action(action, cx);
             });
         });
-        palette::open(self.command_context(cx), on_run, window, cx);
+        palette::open(self.command_context(window, cx), on_run, window, cx);
     }
 
     fn open_settings(&mut self, _: &OpenSettings, window: &mut Window, cx: &mut Context<'_, Self>) {

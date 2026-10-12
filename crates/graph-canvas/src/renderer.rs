@@ -157,7 +157,11 @@ impl SceneSink for Sink<'_> {
 
     fn node(&mut self, node: NodeIx, label: LabelIx, center: Vec2, radius: f32, node_flags: u8) {
         let style = self.input.style;
-        let fill: Hsla = style.palette[label.0 as usize % style.palette.len()];
+        let mut fill: Hsla = style.palette[label.0 as usize % style.palette.len()];
+        if node_flags & flags::PLACEHOLDER != 0 {
+            // Not fetched yet: drawn faded until its properties arrive.
+            fill = fill.opacity(0.4);
+        }
         let (border_w, border_color) = if node_flags & flags::SELECTED != 0 {
             ((radius * 0.35).clamp(1.5, 3.0), style.selection)
         } else if self.input.hovered == Some(node) {

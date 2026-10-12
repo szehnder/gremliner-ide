@@ -6,6 +6,7 @@
 //! does the reverse for request bindings.
 
 pub mod console;
+pub mod elements;
 pub mod fast;
 pub mod graphson;
 pub mod normalize;

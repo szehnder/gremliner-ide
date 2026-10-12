@@ -106,6 +106,21 @@ fn register_commands(cx: &mut App) {
             .when(When::EditorOpen),
         CommandMeta::new("Editor", "Split Right", SplitRight).when(When::EditorOpen),
         CommandMeta::new("Editor", "Save Query", SaveQuery).when(When::EditorOpen),
+        CommandMeta::new("Graph", "Expand Neighbours", graph::ExpandSelection)
+            .when(When::GraphFocused),
+        CommandMeta::new("Graph", "Hide Selection", graph::HideSelection).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Unhide All", graph::UnhideAll).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Select All", graph::SelectAll).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Select Neighbours", graph::SelectNeighbours)
+            .when(When::GraphFocused),
+        CommandMeta::new("Graph", "Pin Selection", graph::PinSelection).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Unpin Selection", graph::UnpinSelection)
+            .when(When::GraphFocused),
+        CommandMeta::new("Graph", "Fit to View", graph::FitGraph).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Find in Graph", graph::FindInGraph)
+            .when(When::GraphFocused)
+            .keywords(&["search"]),
+        CommandMeta::new("Graph", "Clear Graph", graph::ClearGraph).when(When::GraphFocused),
         CommandMeta::new("Application", "Quit", Quit).keywords(&["exit"]),
     ] {
         CommandRegistry::register(cx, meta);

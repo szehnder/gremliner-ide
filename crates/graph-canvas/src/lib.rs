@@ -12,10 +12,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use gpui_kit::{
-    App, Bounds, Context, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render,
-    ScrollDelta, ScrollWheelEvent, SharedString, Styled, Window, canvas, div, fill, outline, point,
-    px, size,
+    App, Bounds, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+    Render, ScrollDelta, ScrollWheelEvent, SharedString, Styled, Window, canvas, div, fill,
+    outline, point, px, size,
 };
 use graph_store::view::minimap::MinimapTransform;
 use graph_store::view::{
@@ -36,6 +36,25 @@ const RASTER_MIN_ELEMENTS: usize = 6_000;
 /// between, so motion stays smooth and detail catches up within this interval).
 const RASTER_REFRESH_MS: u128 = 120;
 const MINIMAP_MARGIN: f32 = 12.0;
+
+/// What the canvas tells its host.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CanvasEvent {
+    /// A node was double-clicked (expand its neighbours).
+    NodeDoubleClicked(NodeIx),
+}
+
+/// A camera tween (find-in-graph focus, fit).
+#[derive(Clone, Copy)]
+struct CameraAnim {
+    from: Camera,
+    to: Camera,
+    started: Instant,
+    duration_ms: f32,
+}
+
+/// Duration of camera tweens (ADR-0023 motion token).
+const CAMERA_TWEEN_MS: f32 = 320.0;
 
 enum Drag {
     None,
@@ -69,7 +88,13 @@ pub struct GraphCanvas {
     minimap_image: Option<(u64, Arc<gpui_kit::RenderImage>)>,
     last_raster_request: Option<Instant>,
     retired_images: Vec<Arc<gpui_kit::RenderImage>>,
+    context_node: Option<NodeIx>,
+    camera_anim: Option<CameraAnim>,
+    /// The user panned or zoomed since the last fit (hosts stop auto-fitting then).
+    camera_touched: bool,
 }
+
+impl EventEmitter<CanvasEvent> for GraphCanvas {}
 
 impl GraphCanvas {
     pub fn new(store: GraphStore, cx: &mut Context<'_, Self>) -> Self {
@@ -97,7 +122,95 @@ impl GraphCanvas {
             minimap_image: None,
             last_raster_request: None,
             retired_images: Vec::new(),
+            context_node: None,
+            camera_anim: None,
+            camera_touched: false,
         }
+    }
+
+    /// Replaces the colours (e.g. on a theme change).
+    pub fn set_style(&mut self, style: CanvasStyle) {
+        self.style = style;
+        self.style_version += 1;
+        self.minimap_image = None;
+    }
+
+    pub fn style(&self) -> &CanvasStyle {
+        &self.style
+    }
+
+    /// Fit the graph into the viewport on the next frame.
+    pub fn request_fit(&mut self) {
+        self.needs_fit = true;
+        self.camera_anim = None;
+        self.camera_touched = false;
+    }
+
+    /// True once the user panned or zoomed after the last fit.
+    pub fn camera_touched(&self) -> bool {
+        self.camera_touched
+    }
+
+    /// The node under the pointer when the context menu was opened.
+    pub fn context_node(&self) -> Option<NodeIx> {
+        self.context_node
+    }
+
+    pub fn hovered(&self) -> Option<NodeIx> {
+        self.hovered
+    }
+
+    pub fn show_minimap(&self) -> bool {
+        self.show_minimap
+    }
+
+    /// Zoom about the viewport centre.
+    pub fn zoom_by(&mut self, factor: f32) {
+        let vp = self.viewport();
+        self.camera_anim = None;
+        self.camera_touched = true;
+        self.camera
+            .zoom_about([vp[0] * 0.5, vp[1] * 0.5], factor, vp);
+    }
+
+    /// Animate the camera to centre `n`, zooming in far enough for labels to show.
+    pub fn focus_node(&mut self, n: NodeIx) {
+        let min_zoom = 14.0 / self.params.node_radius;
+        let to = Camera {
+            center: self.store.position(n),
+            zoom: self.camera.zoom.max(min_zoom),
+        };
+        self.camera_anim = Some(CameraAnim {
+            from: self.camera,
+            to,
+            started: Instant::now(),
+            duration_ms: CAMERA_TWEEN_MS,
+        });
+    }
+
+    /// Advances the camera tween; returns true while it runs.
+    fn step_camera_anim(&mut self) -> bool {
+        let Some(anim) = self.camera_anim else {
+            return false;
+        };
+        let t = (anim.started.elapsed().as_secs_f32() * 1000.0 / anim.duration_ms).min(1.0);
+        // Ease out cubic.
+        let k = 1.0 - (1.0 - t).powi(3);
+        let lerp = |a: f32, b: f32| a + (b - a) * k;
+        // Interpolate zoom geometrically so it feels uniform.
+        let zoom = (anim.from.zoom.ln() + (anim.to.zoom.ln() - anim.from.zoom.ln()) * k).exp();
+        self.camera = Camera {
+            center: [
+                lerp(anim.from.center[0], anim.to.center[0]),
+                lerp(anim.from.center[1], anim.to.center[1]),
+            ],
+            zoom,
+        };
+        if t >= 1.0 {
+            self.camera = anim.to;
+            self.camera_anim = None;
+        }
+        true
     }
 
     /// Mutable access to the store (copy-on-write if a background raster job holds a snapshot).
@@ -263,10 +376,14 @@ impl GraphCanvas {
         window.focus(&self.focus, cx);
         let s = self.local(ev.position);
         self.velocity = [0.0, 0.0];
+        self.camera_anim = None;
         if self.in_minimap(s) {
             self.center_from_minimap(s);
             self.drag = Drag::Minimap;
         } else if let Some(n) = self.node_at_screen(s) {
+            if ev.click_count == 2 && !ev.modifiers.shift {
+                cx.emit(CanvasEvent::NodeDoubleClicked(n));
+            }
             if ev.modifiers.shift {
                 let on = !self.store.has_flag(n, flags::SELECTED);
                 self.graph_mut().set_flag(n, flags::SELECTED, on);
@@ -297,6 +414,29 @@ impl GraphCanvas {
         cx.notify();
     }
 
+    /// Right button: remember the node under the pointer for the context menu and select it.
+    fn on_right_mouse_down(
+        &mut self,
+        ev: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        window.focus(&self.focus, cx);
+        let s = self.local(ev.position);
+        self.context_node = if self.in_minimap(s) {
+            None
+        } else {
+            self.node_at_screen(s)
+        };
+        if let Some(n) = self.context_node
+            && !self.store.has_flag(n, flags::SELECTED)
+        {
+            self.graph_mut().clear_flag(flags::SELECTED);
+            self.graph_mut().set_flag(n, flags::SELECTED, true);
+        }
+        cx.notify();
+    }
+
     fn on_mouse_move(
         &mut self,
         ev: &MouseMoveEvent,
@@ -313,6 +453,7 @@ impl GraphCanvas {
                 *last = s;
                 *last_time = Instant::now();
                 self.camera.pan_screen(d);
+                self.camera_touched = true;
             }
             Drag::Node { node, grab_offset } => {
                 let (node, off) = (*node, *grab_offset);
@@ -385,6 +526,8 @@ impl GraphCanvas {
         let factor = (dy * 0.0025).exp();
         let s = self.local(ev.position);
         let vp = self.viewport();
+        self.camera_anim = None;
+        self.camera_touched = true;
         self.camera.zoom_about(s, factor, vp);
         cx.notify();
     }
@@ -433,6 +576,7 @@ impl Render for GraphCanvas {
             .bg(background)
             .track_focus(&self.focus)
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
@@ -444,7 +588,10 @@ impl Render for GraphCanvas {
                         move |bounds, _window, cx| {
                             entity.update(cx, |this, _| {
                                 this.bounds = bounds;
-                                if this.needs_fit && f32::from(bounds.size.width) > 0.0 {
+                                if this.needs_fit
+                                    && f32::from(bounds.size.width) > 0.0
+                                    && this.store.bounds().is_some()
+                                {
                                     this.fit_to_view();
                                     this.needs_fit = false;
                                 }
@@ -468,7 +615,7 @@ fn paint_frame(
     // Advance animations (benchmark camera path, inertia) before drawing.
     let (animating, finished_bench) = entity.update(cx, |this, _| {
         let dt = this.stats.intervals_ms.last().copied().unwrap_or(16.0) / 1000.0;
-        let mut animating = this.step_inertia(dt.min(0.05));
+        let mut animating = this.step_inertia(dt.min(0.05)) | this.step_camera_anim();
         let mut finished = None;
         let vp = this.viewport();
         if let Some(run) = &mut this.bench {

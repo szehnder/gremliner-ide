@@ -94,15 +94,14 @@ pub fn rasterize(
 
     let skip = |f: u8| f & (flags::HIDDEN | flags::SELECTED) != 0;
     let (srcs, dsts) = store.edge_endpoints();
+    let edge_flags = store.edge_flags();
     let segs: Vec<Seg> = srcs
         .par_iter()
         .zip(dsts.par_iter())
-        .filter_map(|(si, di)| {
+        .zip(edge_flags.par_iter())
+        .filter_map(|((si, di), ef)| {
             let (si, di) = (si.0 as usize, di.0 as usize);
-            if skip(node_flags[si])
-                || skip(node_flags[di])
-                || node_flags[si] & node_flags[di] & flags::HIDDEN != 0
-            {
+            if skip(node_flags[si]) || skip(node_flags[di]) || ef & flags::HIDDEN != 0 {
                 return None;
             }
             let (a, b) = (dev[si], dev[di]);

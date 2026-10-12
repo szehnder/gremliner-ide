@@ -175,7 +175,7 @@ fn scenario_query_execution_summary_after_success(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn elements_open_in_table_end_to_end(cx: &mut TestAppContext) {
+fn scenario_query_execution_elements_open_in_graph(cx: &mut TestAppContext) {
     if !testenv_up() {
         return;
     }
@@ -186,7 +186,7 @@ fn elements_open_in_table_end_to_end(cx: &mut TestAppContext) {
     wait_done(&mut env, Duration::from_secs(10));
     env.cx.run_until_parked();
     let ws = env.ws.clone();
-    let (view, rows) = env.cx.update(|_, cx| {
+    let results = env.cx.update(|_, cx| {
         let dock = ws.read(cx).dock_area().read(cx);
         let panel = dock
             .layout(gpui_kit::component::dock::DockPlacement::Bottom)
@@ -200,15 +200,24 @@ fn elements_open_in_table_end_to_end(cx: &mut TestAppContext) {
                 })
             })
             .unwrap();
-        let view = panel.read(cx).view().read(cx);
-        let rows = view.table().and_then(|t| {
+        panel.read(cx).view().clone()
+    });
+    let (view, nodes) = env.cx.update(|_, cx| {
+        let v = results.read(cx);
+        let nodes = v.graph().map(|g| g.read(cx).store(cx).node_count());
+        (v.view(), nodes)
+    });
+    assert_eq!(view, ViewKind::Graph);
+    assert_eq!(nodes, Some(4), "four person nodes");
+    env.cx
+        .update(|window, cx| results.update(cx, |v, cx| v.set_view(ViewKind::Table, window, cx)));
+    let rows = env.cx.update(|_, cx| {
+        results.read(cx).table().and_then(|t| {
             t.read(cx)
                 .table()
                 .map(|s| s.read(cx).delegate().order().len())
-        });
-        (view.view(), rows)
+        })
     });
-    assert_eq!(view, ViewKind::Table);
     assert_eq!(rows, Some(4), "four person rows");
 }
 

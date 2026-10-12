@@ -10,8 +10,10 @@ use crate::{GKey, GValue, IndexMap, console, new_map};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResultShape {
     Empty,
-    /// Vertices, edges and properties.
+    /// Vertices and edges (possibly mixed with properties).
     Elements,
+    /// Only vertex properties and properties.
+    Properties,
     Paths,
     /// Maps (valueMap, elementMap, project, group, ...).
     Maps,
@@ -24,6 +26,7 @@ pub enum ResultShape {
 /// Which view to open first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreferredView {
+    Graph,
     Table,
     Json,
     Console,
@@ -32,8 +35,9 @@ pub enum PreferredView {
 impl ResultShape {
     pub fn preferred_view(self) -> PreferredView {
         match self {
-            ResultShape::Elements | ResultShape::Maps => PreferredView::Table,
-            ResultShape::Paths | ResultShape::Mixed => PreferredView::Json,
+            ResultShape::Elements | ResultShape::Paths => PreferredView::Graph,
+            ResultShape::Properties | ResultShape::Maps => PreferredView::Table,
+            ResultShape::Mixed => PreferredView::Json,
             ResultShape::Scalars | ResultShape::Empty => PreferredView::Console,
         }
     }
@@ -67,7 +71,14 @@ pub fn shape(items: &[GValue]) -> ResultShape {
     };
     let all = |f: fn(&GValue) -> bool| items.iter().all(f);
     if all(is_element) {
-        ResultShape::Elements
+        if items
+            .iter()
+            .any(|v| matches!(v, GValue::Vertex(_) | GValue::Edge(_)))
+        {
+            ResultShape::Elements
+        } else {
+            ResultShape::Properties
+        }
     } else if all(|v| matches!(v, GValue::Path(_))) {
         ResultShape::Paths
     } else if all(|v| matches!(v, GValue::Map(_))) {
@@ -196,7 +207,7 @@ fn key_text(key: &GKey) -> String {
 pub fn table(items: &[GValue]) -> TableModel {
     match shape(items) {
         ResultShape::Empty => TableModel::default(),
-        ResultShape::Elements => element_tables(items),
+        ResultShape::Elements | ResultShape::Properties => element_tables(items),
         ResultShape::Maps => {
             let mut b = Builder::new("values", &[]);
             for (i, item) in items.iter().enumerate() {
@@ -610,13 +621,13 @@ mod tests {
     }
 
     #[test]
-    fn scenario_query_execution_elements_open_in_table() {
+    fn elements_and_paths_prefer_graph() {
         let items: Vec<GValue> = modern()
             .into_iter()
             .filter(|v| matches!(v, GValue::Vertex(x) if x.label == "person"))
             .collect();
         assert_eq!(shape(&items), ResultShape::Elements);
-        assert_eq!(shape(&items).preferred_view(), PreferredView::Table);
+        assert_eq!(shape(&items).preferred_view(), PreferredView::Graph);
         let model = table(&items);
         assert_eq!(model.groups.len(), 1);
         assert_eq!(model.groups[0].rows.len(), 4);
@@ -628,7 +639,7 @@ mod tests {
             labels: vec![vec![]],
             objects: vec![person(1, "marko", 29)],
         });
-        assert_eq!(shape(&[path]).preferred_view(), PreferredView::Json);
+        assert_eq!(shape(&[path]).preferred_view(), PreferredView::Graph);
     }
 
     #[test]

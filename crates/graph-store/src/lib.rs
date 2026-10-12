@@ -1,8 +1,13 @@
 //! In-memory graph store for visualisation, in struct-of-arrays form with dense `u32` indices (ADR-0008),
 //! plus the pure view geometry ([`view`]) the canvas and the headless render benchmark share.
 
+pub mod merge;
 pub mod synth;
 pub mod view;
+pub mod visibility;
+
+pub use merge::{EdgeIn, GraphDelta, MergeReport, NodeIn};
+pub use visibility::{Filter, FilterOp};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,6 +31,37 @@ impl From<&str> for ExtId {
     }
 }
 
+impl std::fmt::Display for ExtId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExtId::Int(n) => write!(f, "{n}"),
+            ExtId::Str(s) => f.write_str(s),
+        }
+    }
+}
+
+/// A property value as the view needs it: for captions, search and filters.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PropValue {
+    Bool(bool),
+    Num(f64),
+    Text(Arc<str>),
+}
+
+impl std::fmt::Display for PropValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PropValue::Bool(b) => write!(f, "{b}"),
+            PropValue::Num(n) if n.fract() == 0.0 && n.abs() < 1e15 => write!(f, "{}", *n as i64),
+            PropValue::Num(n) => write!(f, "{n}"),
+            PropValue::Text(t) => f.write_str(t),
+        }
+    }
+}
+
+/// Element properties; a key may repeat (multi-properties).
+pub type Props = Vec<(Arc<str>, PropValue)>;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NodeIx(pub u32);
 
@@ -38,8 +74,15 @@ pub struct LabelIx(pub u16);
 
 pub mod flags {
     pub const SELECTED: u8 = 1;
+    /// Effectively hidden (by the user, a hidden label or the filter); what renderers and hit-testing
+    /// check. Maintained by [`GraphStore::recompute_visibility`](crate::GraphStore::recompute_visibility).
     pub const HIDDEN: u8 = 1 << 1;
     pub const PINNED: u8 = 1 << 2;
+    /// Hidden explicitly by the user (Delete).
+    pub const USER_HIDDEN: u8 = 1 << 3;
+    /// Details not fetched yet: only the id and label are known (an edge endpoint that was not
+    /// returned, or a vertex returned without properties, as in `path()` results).
+    pub const PLACEHOLDER: u8 = 1 << 4;
 }
 
 #[derive(Default, Clone)]
@@ -70,6 +113,7 @@ pub struct GraphStore {
     node_label: Vec<LabelIx>,
     node_flags: Vec<u8>,
     node_caption: Vec<Arc<str>>,
+    node_props: Vec<Props>,
     vertex_labels: Labels,
 
     edge_ext: Vec<ExtId>,
@@ -77,8 +121,11 @@ pub struct GraphStore {
     edge_src: Vec<NodeIx>,
     edge_dst: Vec<NodeIx>,
     edge_label: Vec<LabelIx>,
+    edge_flags: Vec<u8>,
+    edge_props: Vec<Props>,
     edge_labels: Labels,
 
+    visibility: visibility::Visibility,
     revision: u64,
 }
 
@@ -111,8 +158,10 @@ impl GraphStore {
         self.positions.push(pos);
         let label = self.vertex_labels.intern(label);
         self.node_label.push(label);
-        self.node_flags.push(0);
+        let hidden = self.visibility.hides_vertex_label(label);
+        self.node_flags.push(if hidden { flags::HIDDEN } else { 0 });
         self.node_caption.push(caption.into());
+        self.node_props.push(Props::new());
         self.revision += 1;
         ix
     }
@@ -129,8 +178,80 @@ impl GraphStore {
         self.edge_dst.push(dst);
         let label = self.edge_labels.intern(label);
         self.edge_label.push(label);
+        self.edge_props.push(Props::new());
+        let hidden = self.visibility.hides_edge_label(label)
+            || (self.node_flags[src.0 as usize] | self.node_flags[dst.0 as usize]) & flags::HIDDEN
+                != 0;
+        self.edge_flags.push(if hidden { flags::HIDDEN } else { 0 });
         self.revision += 1;
         ix
+    }
+
+    /// Removes everything (labels and visibility settings stay).
+    pub fn clear(&mut self) {
+        let revision = self.revision + 1;
+        let visibility = std::mem::take(&mut self.visibility);
+        *self = Self {
+            visibility,
+            revision,
+            ..Self::default()
+        };
+    }
+
+    pub fn edge_by_ext(&self, ext: &ExtId) -> Option<EdgeIx> {
+        self.edge_lookup.get(ext).copied()
+    }
+
+    pub fn edge_ext(&self, e: EdgeIx) -> &ExtId {
+        &self.edge_ext[e.0 as usize]
+    }
+
+    pub fn node_props(&self, n: NodeIx) -> &Props {
+        &self.node_props[n.0 as usize]
+    }
+
+    pub fn edge_props(&self, e: EdgeIx) -> &Props {
+        &self.edge_props[e.0 as usize]
+    }
+
+    /// The first value of property `key` on node `n`.
+    pub fn node_prop(&self, n: NodeIx, key: &str) -> Option<&PropValue> {
+        self.node_props[n.0 as usize]
+            .iter()
+            .find(|(k, _)| &**k == key)
+            .map(|(_, v)| v)
+    }
+
+    pub fn node_label(&self, n: NodeIx) -> LabelIx {
+        self.node_label[n.0 as usize]
+    }
+
+    pub fn edge_label(&self, e: EdgeIx) -> LabelIx {
+        self.edge_label[e.0 as usize]
+    }
+
+    pub fn edge_label_count(&self) -> usize {
+        self.edge_labels.names.len()
+    }
+
+    pub fn vertex_label_ix(&self, name: &str) -> Option<LabelIx> {
+        self.vertex_labels.lookup.get(name).copied()
+    }
+
+    pub fn edge_label_ix(&self, name: &str) -> Option<LabelIx> {
+        self.edge_labels.lookup.get(name).copied()
+    }
+
+    pub fn edge_flags(&self) -> &[u8] {
+        &self.edge_flags
+    }
+
+    pub fn edge_has_flag(&self, e: EdgeIx, flag: u8) -> bool {
+        self.edge_flags[e.0 as usize] & flag != 0
+    }
+
+    pub fn edge_endpoints_of(&self, e: EdgeIx) -> (NodeIx, NodeIx) {
+        (self.edge_src[e.0 as usize], self.edge_dst[e.0 as usize])
     }
 
     pub fn node_by_ext(&self, ext: &ExtId) -> Option<NodeIx> {
@@ -210,6 +331,63 @@ impl GraphStore {
     pub fn clear_flag(&mut self, flag: u8) {
         for f in &mut self.node_flags {
             *f &= !flag;
+        }
+        self.revision += 1;
+    }
+
+    pub fn selected_count(&self) -> usize {
+        self.node_flags
+            .iter()
+            .filter(|f| **f & flags::SELECTED != 0)
+            .count()
+    }
+
+    /// Selects every visible node.
+    pub fn select_all(&mut self) {
+        for f in &mut self.node_flags {
+            if *f & flags::HIDDEN == 0 {
+                *f |= flags::SELECTED;
+            }
+        }
+        self.revision += 1;
+    }
+
+    /// Visible nodes adjacent (through visible edges) to any node in `nodes`, excluding `nodes`.
+    pub fn neighbours(&self, nodes: &[NodeIx]) -> Vec<NodeIx> {
+        let set: std::collections::HashSet<NodeIx> = nodes.iter().copied().collect();
+        let mut out = std::collections::BTreeSet::new();
+        for (i, (s, d)) in self.edge_src.iter().zip(&self.edge_dst).enumerate() {
+            if self.edge_flags[i] & flags::HIDDEN != 0 {
+                continue;
+            }
+            if set.contains(s) && !set.contains(d) {
+                out.insert(*d);
+            } else if set.contains(d) && !set.contains(s) {
+                out.insert(*s);
+            }
+        }
+        out.into_iter().collect()
+    }
+
+    /// Adds the neighbours of the selection to the selection.
+    pub fn select_neighbours(&mut self) {
+        let selected: Vec<NodeIx> = self.selected().collect();
+        for n in self.neighbours(&selected) {
+            self.node_flags[n.0 as usize] |= flags::SELECTED;
+        }
+        self.revision += 1;
+    }
+
+    /// Sets or clears `flag` on every selected node (pin/unpin).
+    pub fn set_flag_on_selected(&mut self, flag: u8, on: bool) {
+        for f in &mut self.node_flags {
+            if *f & flags::SELECTED != 0 {
+                if on {
+                    *f |= flag;
+                } else {
+                    *f &= !flag;
+                }
+            }
         }
         self.revision += 1;
     }

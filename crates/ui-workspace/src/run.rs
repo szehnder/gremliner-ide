@@ -14,7 +14,9 @@ use gpui_kit::*;
 use gremlin_client::{Error as ClientError, Request};
 use gremlin_model::GValue;
 use providers::read_only;
-use ui_results::{ResultSet, RunError, RunStatus, error_range};
+use ui_results::{
+    FetchRequest, GraphView, GraphViewEvent, ResultSet, RunError, RunStatus, error_range,
+};
 use uuid::Uuid;
 
 use crate::connections::{ConnStatus, ConnectionManager};
@@ -34,13 +36,22 @@ struct Running {
     cancel: Option<oneshot::Sender<()>>,
 }
 
-/// Owns the current run and the latest result per editor tab.
+/// Items a graph follow-up query may return before it is cut off.
+const FETCH_LIMIT: usize = 20_000;
+
+/// Owns the current run, the latest result per editor tab, and each tab's graph (which runs its
+/// follow-up queries here, against the tab's connection).
 #[derive(Default)]
 pub struct Runner {
     next_run: u64,
     running: Option<Running>,
     latest: Option<Entity<ResultSet>>,
+    latest_tab: Option<Uuid>,
     per_tab: HashMap<Uuid, Entity<ResultSet>>,
+    graphs: HashMap<Uuid, Entity<GraphView>>,
+    /// The connection each tab last ran against (graph follow-ups use it).
+    tab_connection: HashMap<Uuid, Uuid>,
+    _graph_subscriptions: Vec<Subscription>,
 }
 
 impl EventEmitter<RunnerEvent> for Runner {}
@@ -77,6 +88,81 @@ impl Runner {
 
     pub fn result_for_tab(&self, tab: Uuid) -> Option<&Entity<ResultSet>> {
         self.per_tab.get(&tab)
+    }
+
+    /// The graph of the tab that ran last.
+    pub fn latest_graph(&self) -> Option<&Entity<GraphView>> {
+        self.graphs.get(&self.latest_tab?)
+    }
+
+    pub fn graph_for_tab(&self, tab: Uuid) -> Option<&Entity<GraphView>> {
+        self.graphs.get(&tab)
+    }
+
+    fn ensure_graph(&mut self, tab: Uuid, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.graphs.contains_key(&tab) {
+            return;
+        }
+        let graph = cx.new(|cx| GraphView::new(window, cx));
+        self._graph_subscriptions.push(cx.subscribe(
+            &graph,
+            move |this, graph, event: &GraphViewEvent, cx| {
+                if let GraphViewEvent::Fetch(request) = event {
+                    this.fetch(tab, graph, request.clone(), cx);
+                }
+            },
+        ));
+        self.graphs.insert(tab, graph);
+    }
+
+    /// Run a graph follow-up query on the tab's connection and hand the items back to the graph.
+    fn fetch(
+        &mut self,
+        tab: Uuid,
+        graph: Entity<GraphView>,
+        request: FetchRequest,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let manager = ConnectionManager::global(cx);
+        let Some(connection_id) = self.tab_connection.get(&tab).copied() else {
+            graph.update(cx, |g, cx| {
+                g.apply_fetch(&request, Err("no connection".into()), cx)
+            });
+            return;
+        };
+        let timeout = manager
+            .read(cx)
+            .get(connection_id)
+            .map(|c| Duration::from_millis(c.timeout_ms))
+            .unwrap_or(Duration::from_secs(30));
+        cx.spawn(async move |_, cx| {
+            let needs_connect = manager.read_with(cx, |m, _| m.session(connection_id).is_none());
+            if needs_connect {
+                manager
+                    .update(cx, |m, cx| m.connect(connection_id, cx))
+                    .await;
+            }
+            let client = manager.read_with(cx, |m, _| {
+                m.session(connection_id).map(|s| s.client.clone())
+            });
+            let result = match client {
+                None => Err("not connected".to_owned()),
+                Some(client) => {
+                    let script = request.script.clone();
+                    let work = cx.update(|cx| {
+                        spawn_io(cx, async move {
+                            collect(client, script, timeout, FETCH_LIMIT).await
+                        })
+                    });
+                    match work.await {
+                        Ok(r) => r,
+                        Err(err) => Err(err.to_string()),
+                    }
+                }
+            };
+            graph.update(cx, |g, cx| g.apply_fetch(&request, result, cx));
+        })
+        .detach();
     }
 
     /// Stop the running query; results so far stay, marked cancelled.
@@ -172,7 +258,10 @@ impl Runner {
             )
         });
         self.latest = Some(result.clone());
+        self.latest_tab = Some(request.tab_id);
         self.per_tab.insert(request.tab_id, result.clone());
+        self.tab_connection.insert(request.tab_id, connection_id);
+        self.ensure_graph(request.tab_id, window, cx);
         let (cancel_tx, cancel_rx) = oneshot::channel();
         self.running = Some(Running {
             run_id,
@@ -318,6 +407,34 @@ async fn stream(
             },
         }
     }
+}
+
+/// Run `script` to completion (up to `limit` items) and return the items.
+async fn collect(
+    client: gremlin_client::Client,
+    script: String,
+    timeout: Duration,
+    limit: usize,
+) -> Result<Vec<GValue>, String> {
+    let mut results = client
+        .submit(Request::new(script).timeout(timeout))
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut items = Vec::new();
+    while let Some(batch) = results.next().await {
+        let batch = batch.map_err(|e| e.to_string())?;
+        let last = batch.status != 206;
+        items.extend(batch.items);
+        if items.len() >= limit {
+            results.cancel();
+            items.truncate(limit);
+            break;
+        }
+        if last {
+            break;
+        }
+    }
+    Ok(items)
 }
 
 fn run_error(err: &ClientError, script: &str, base: usize) -> RunError {

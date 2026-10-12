@@ -26,6 +26,47 @@ pub struct CanvasStyle {
 }
 
 impl CanvasStyle {
+    /// The fill colour for vertex label `label` (the legend uses the same).
+    pub fn label_color(&self, label: graph_store::LabelIx) -> Hsla {
+        self.palette[label.0 as usize % self.palette.len()]
+    }
+
+    pub fn light() -> Self {
+        let c = |h: f32, s: f32, l: f32| hsla(h / 360.0, s, l, 1.0);
+        Self {
+            background: c(220.0, 0.20, 0.975),
+            palette: [
+                c(212.0, 0.75, 0.50),
+                c(152.0, 0.55, 0.38),
+                c(28.0, 0.90, 0.50),
+                c(340.0, 0.65, 0.52),
+                c(265.0, 0.55, 0.56),
+                c(186.0, 0.70, 0.36),
+                c(45.0, 0.90, 0.45),
+                c(8.0, 0.70, 0.52),
+                c(110.0, 0.45, 0.40),
+                c(290.0, 0.40, 0.50),
+                c(200.0, 0.30, 0.48),
+                c(24.0, 0.45, 0.42),
+            ],
+            edge: hsla(220.0 / 360.0, 0.20, 0.35, 0.35),
+            edge_far: hsla(220.0 / 360.0, 0.20, 0.35, 0.18),
+            edge_highlight: c(32.0, 0.95, 0.48),
+            selection: c(32.0, 0.95, 0.48),
+            hover: hsla(220.0 / 360.0, 0.30, 0.15, 0.85),
+            pinned: hsla(220.0 / 360.0, 0.30, 0.15, 0.55),
+            label: hsla(220.0 / 360.0, 0.25, 0.20, 0.95),
+            minimap_bg: hsla(220.0 / 360.0, 0.20, 0.99, 0.94),
+            minimap_node: hsla(212.0 / 360.0, 0.50, 0.45, 0.75),
+            minimap_viewport: c(32.0, 0.95, 0.48),
+            rubber_band: hsla(212.0 / 360.0, 0.80, 0.50, 0.12),
+            hud_bg: hsla(0.0, 0.0, 0.0, 0.6),
+            hud_text: hsla(120.0 / 360.0, 0.6, 0.75, 1.0),
+            minimap_radius: px(6.0),
+            hud_radius: px(4.0),
+        }
+    }
+
     pub fn dark() -> Self {
         let c = |h: f32, s: f32, l: f32| hsla(h / 360.0, s, l, 1.0);
         Self {

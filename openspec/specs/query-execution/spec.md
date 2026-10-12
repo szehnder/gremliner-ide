@@ -51,9 +51,9 @@ When a query fails, the results dock SHALL show the server's error message and c
 - **WHEN** the user runs `g.V().nosuchstep()`
 - **THEN** the results dock shows an error view with the server message, and no stale results from a previous run
 
-### Requirement: Default results view by shape
-The results dock SHALL choose the initial view from the result shape: Table for elements and maps, JSON for nested or mixed structures, Console for scalars, unless the tab specifies a default view.
+### Requirement: Initial results view
+The results dock SHALL choose the initial view from the result shape: Graph for vertices, edges and paths, Table for maps and properties, JSON for nested or mixed structures, Console for scalars, unless the tab specifies a default view.
 
-#### Scenario: Elements open in table
+#### Scenario: Elements open in graph
 - **WHEN** the user runs `g.V().hasLabel('person')` on the modern graph
-- **THEN** the Table view is selected and shows four person rows
+- **THEN** the Graph view is selected and shows four person nodes, and the Table view lists four person rows

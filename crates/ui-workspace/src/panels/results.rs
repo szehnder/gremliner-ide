@@ -34,8 +34,13 @@ impl WorkspacePanel for ResultsPanel {
                             && let Some(result) = runner.read(cx).latest().cloned()
                         {
                             this.has_result = true;
-                            this.view
-                                .update(cx, |v, cx| v.set_result(result, window, cx));
+                            let graph = runner.read(cx).latest_graph().cloned();
+                            this.view.update(cx, |v, cx| {
+                                if let Some(graph) = graph {
+                                    v.set_graph(graph, window, cx);
+                                }
+                                v.set_result(result, window, cx)
+                            });
                             cx.notify();
                         }
                     },
@@ -49,8 +54,14 @@ impl WorkspacePanel for ResultsPanel {
             // A panel rebuilt (e.g. after a layout reset) shows the latest result right away.
             let latest = runner.read(cx).latest().cloned();
             let has_result = latest.is_some();
+            let graph = runner.read(cx).latest_graph().cloned();
             if let Some(result) = latest {
-                view.update(cx, |v, cx| v.set_result(result, window, cx));
+                view.update(cx, |v, cx| {
+                    if let Some(graph) = graph {
+                        v.set_graph(graph, window, cx);
+                    }
+                    v.set_result(result, window, cx)
+                });
             }
             Self {
                 focus_handle: cx.focus_handle(),
@@ -96,7 +107,7 @@ impl Render for ResultsPanel {
             empty_state(
                 IconName::LayoutDashboard,
                 "No results yet",
-                "Run a query to see vertices, edges and values here as a table, JSON or console output.",
+                "Run a query to see vertices, edges and values here as a graph, table, JSON or console output.",
                 cx,
             )
             .into_any_element()

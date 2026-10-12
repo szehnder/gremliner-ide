@@ -26,6 +26,7 @@ gremlin-model.workspace = true
 gremlin-syntax.workspace = true
 
 [dev-dependencies]
+graph-store.workspace = true
 gpui-kit = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 futures = { workspace = true, features = ["executor"] }

@@ -173,7 +173,12 @@ async fn scenario_connections_duplicate_name_rejected(cx: &mut TestAppContext) {
     let form = open_form(None, &mut cx);
     set(&form, |f| &f.name, "local", &mut cx);
     cx.update(|window, cx| window.click("conn-save", cx));
-    cx.run_until_parked();
+    // The store answers from the I/O runtime (a real thread): wait for it.
+    let f = form.clone();
+    wait_until(&mut cx, move |cx| {
+        cx.update(|_, cx| f.read(cx).errors.name.is_some())
+    })
+    .await;
     let error = cx.update(|_, cx| form.read(cx).errors.name.clone());
     assert_eq!(
         error.as_deref(),

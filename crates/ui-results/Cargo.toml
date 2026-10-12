@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 gremlin-model.workspace = true
 graph-canvas.workspace = true
+graph-store.workspace = true
 gpui-kit.workspace = true
 ui-theme.workspace = true
 serde_json.workspace = true
@@ -17,6 +18,7 @@ log.workspace = true
 
 [dev-dependencies]
 gpui-kit = { workspace = true, features = ["test-support"] }
+gremlin-syntax.workspace = true
 
 [lints]
 workspace = true

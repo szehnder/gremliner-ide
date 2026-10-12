@@ -268,6 +268,12 @@ impl TableView {
         &self.filter
     }
 
+    /// Apply the filter input's current text (`set_value` emits no change event).
+    pub fn apply_filter_input(&mut self, cx: &mut Context<'_, Self>) {
+        let text = self.filter.read(cx).value().to_string();
+        self.set_filter(&text, cx);
+    }
+
     /// The visible table as CSV (current label, filter and sort).
     pub fn csv(&self, cx: &App) -> Option<String> {
         let table = self.table.as_ref()?.read(cx);

@@ -6,6 +6,9 @@ use crate::actions::*;
 
 /// The text input inside a query editor.
 const EDITOR_INPUT: &str = "QueryEditor > Input";
+/// The graph canvas (not the graph view's search or filter inputs).
+const GRAPH_CANVAS: &str = ui_results::graph_view::CANVAS_CONTEXT;
+const GRAPH_VIEW: &str = ui_results::graph_view::VIEW_CONTEXT;
 
 pub fn bind_default_keys(cx: &mut App) {
     cx.bind_keys([
@@ -34,5 +37,13 @@ pub fn bind_default_keys(cx: &mut App) {
         KeyBinding::new("alt-enter", editor::RunQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("shift-alt-f", editor::FormatQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("secondary-/", editor::ToggleLineComment, Some(EDITOR_INPUT)),
+        KeyBinding::new("backspace", graph::HideSelection, Some(GRAPH_CANVAS)),
+        KeyBinding::new("delete", graph::HideSelection, Some(GRAPH_CANVAS)),
+        KeyBinding::new("secondary-shift-h", graph::UnhideAll, Some(GRAPH_CANVAS)),
+        KeyBinding::new("secondary-a", graph::SelectAll, Some(GRAPH_CANVAS)),
+        KeyBinding::new("n", graph::SelectNeighbours, Some(GRAPH_CANVAS)),
+        KeyBinding::new("e", graph::ExpandSelection, Some(GRAPH_CANVAS)),
+        KeyBinding::new("f", graph::FitGraph, Some(GRAPH_CANVAS)),
+        KeyBinding::new("secondary-f", graph::FindInGraph, Some(GRAPH_VIEW)),
     ]);
 }

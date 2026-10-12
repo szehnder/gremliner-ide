@@ -183,10 +183,11 @@ pub fn build_scene(
     // Edges.
     let (srcs, dsts) = store.edge_endpoints();
     let edge_labels = store.edge_labels();
+    let edge_flags = store.edge_flags();
     for (i, (s, d)) in srcs.iter().zip(dsts).enumerate() {
         let (si, di) = (s.0 as usize, d.0 as usize);
         let (fs, fd) = (node_flags[si], node_flags[di]);
-        if (fs | fd) & flags::HIDDEN != 0 {
+        if (fs | fd | edge_flags[i]) & flags::HIDDEN != 0 {
             continue;
         }
         let a = camera.world_to_screen(positions[si], viewport);

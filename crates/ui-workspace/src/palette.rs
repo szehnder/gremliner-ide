@@ -30,6 +30,8 @@ pub enum When {
     EditorOpen,
     /// Only while connected to a graph.
     Connected,
+    /// Only while the graph canvas has focus.
+    GraphFocused,
 }
 
 /// What the palette knows about the current context when it opens.
@@ -37,6 +39,7 @@ pub enum When {
 pub struct CommandContext {
     pub editor_open: bool,
     pub connected: bool,
+    pub graph_focused: bool,
 }
 
 impl When {
@@ -45,6 +48,7 @@ impl When {
             When::Always => true,
             When::EditorOpen => ctx.editor_open,
             When::Connected => ctx.connected,
+            When::GraphFocused => ctx.graph_focused,
         }
     }
 }

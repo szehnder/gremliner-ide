@@ -119,3 +119,19 @@ Lessons learned while building with gpui-kit 0.7.x (`gpui-pre` 0.3.x). Add to th
   clock is advanced, so throttled work must also run on the final update.
 - Gremlin Server 3.7 keeps evaluating a script after the client stops reading (no protocol-level cancel
   for sessionless `eval`); Cancel stops delivery, and the server stops at its evaluation timeout.
+
+## Graph view
+- gpui-kit `ContextMenuExt::context_menu` builds its menu in a deferred call on the next frame, so a child's
+  own right-button `on_mouse_down` runs first: the canvas records the node under the pointer there, and the
+  menu builder reads it. `PopupMenu::action_context(focus)` routes `.menu(label, action)` items to that
+  focus handle (and shows their key hints); closures go in `PopupMenuItem::new(..).on_click(..)`.
+- Bind keys like Delete to a context set on a wrapper around the canvas only (`"GraphCanvas"`), not on the
+  whole view, or they fire while typing in the view's search box.
+- `window.is_action_available(&action, cx)` tells whether the focused element's dispatch path handles an
+  action; the palette uses it to offer graph commands only while the graph is focused.
+- `VisualTestContext::simulate_event(MouseDownEvent { click_count: 2, .. })` simulates a double click
+  (`simulate_mouse_down` always sends `click_count: 1`).
+- Camera tweens in the canvas use real `Instant`s, not the test clock: tests sleep for the tween and then
+  `render_frame`.
+- Gremlin Server returns `path()` (and `select()`) vertices without properties; the graph marks such
+  vertices as placeholders and fetches them with `g.V(ids)` so captions appear.
