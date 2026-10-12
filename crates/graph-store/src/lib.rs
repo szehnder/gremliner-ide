@@ -474,6 +474,119 @@ impl GraphStore {
         self.revision += 1;
     }
 
+    /// Selects edge `e` (alone, or added to the edge selection).
+    pub fn select_edge(&mut self, e: EdgeIx, additive: bool) {
+        if !additive {
+            self.clear_selection();
+        }
+        self.edge_flags[e.0 as usize] |= flags::SELECTED;
+        self.revision += 1;
+    }
+
+    pub fn selected_edges(&self) -> impl Iterator<Item = EdgeIx> + '_ {
+        self.edge_flags
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| **f & flags::SELECTED != 0)
+            .map(|(i, _)| EdgeIx(i as u32))
+    }
+
+    /// Deselects every node and edge.
+    pub fn clear_selection(&mut self) {
+        for f in self.node_flags.iter_mut().chain(self.edge_flags.iter_mut()) {
+            *f &= !flags::SELECTED;
+        }
+        self.revision += 1;
+    }
+
+    /// Replaces node `n`'s values for `key` (`None` removes the property).
+    pub fn set_node_prop(&mut self, n: NodeIx, key: &str, values: Option<Vec<PropValue>>) {
+        let props = &mut self.node_props[n.0 as usize];
+        props.retain(|(k, _)| &**k != key);
+        if let Some(values) = values {
+            let key: Arc<str> = key.into();
+            props.extend(values.into_iter().map(|v| (key.clone(), v)));
+        }
+        self.revision += 1;
+    }
+
+    /// Replaces edge `e`'s value for `key` (`None` removes the property).
+    pub fn set_edge_prop(&mut self, e: EdgeIx, key: &str, value: Option<PropValue>) {
+        let props = &mut self.edge_props[e.0 as usize];
+        props.retain(|(k, _)| &**k != key);
+        if let Some(v) = value {
+            props.push((key.into(), v));
+        }
+        self.revision += 1;
+    }
+
+    /// Removes nodes (with their incident edges) and edges. Indices are compacted, so any `NodeIx` or
+    /// `EdgeIx` held elsewhere is invalid afterwards; look elements up again by external id.
+    pub fn remove(&mut self, nodes: &[NodeIx], edges: &[EdgeIx]) {
+        let mut drop_node = vec![false; self.node_count()];
+        for n in nodes {
+            if let Some(d) = drop_node.get_mut(n.0 as usize) {
+                *d = true;
+            }
+        }
+        let mut drop_edge = vec![false; self.edge_count()];
+        for e in edges {
+            if let Some(d) = drop_edge.get_mut(e.0 as usize) {
+                *d = true;
+            }
+        }
+        for (i, d) in drop_edge.iter_mut().enumerate() {
+            *d |= drop_node[self.edge_src[i].0 as usize] || drop_node[self.edge_dst[i].0 as usize];
+        }
+        let old = std::mem::take(self);
+        let mut map = vec![None; old.node_count()];
+        self.vertex_labels = old.vertex_labels.clone();
+        self.edge_labels = old.edge_labels.clone();
+        self.visibility = old.visibility.clone();
+        for i in 0..old.node_count() {
+            if drop_node[i] {
+                continue;
+            }
+            let ix = NodeIx(self.node_ext.len() as u32);
+            map[i] = Some(ix);
+            self.node_lookup.insert(old.node_ext[i].clone(), ix);
+            self.node_ext.push(old.node_ext[i].clone());
+            self.positions.push(old.positions[i]);
+            self.node_label.push(old.node_label[i]);
+            self.node_flags.push(old.node_flags[i]);
+            self.node_caption.push(old.node_caption[i].clone());
+            self.node_props.push(old.node_props[i].clone());
+            self.node_radius.push(old.node_radius[i]);
+        }
+        self.max_node_radius = self
+            .node_radius
+            .iter()
+            .copied()
+            .fold(DEFAULT_NODE_RADIUS, f32::max);
+        for i in 0..old.edge_count() {
+            let (Some(s), Some(d)) = (
+                map[old.edge_src[i].0 as usize],
+                map[old.edge_dst[i].0 as usize],
+            ) else {
+                continue;
+            };
+            if drop_edge[i] {
+                continue;
+            }
+            let ix = EdgeIx(self.edge_ext.len() as u32);
+            self.edge_lookup.insert(old.edge_ext[i].clone(), ix);
+            self.edge_ext.push(old.edge_ext[i].clone());
+            self.edge_src.push(s);
+            self.edge_dst.push(d);
+            self.edge_label.push(old.edge_label[i]);
+            self.edge_flags.push(old.edge_flags[i]);
+            self.edge_props.push(old.edge_props[i].clone());
+            self.edge_width.push(old.edge_width[i]);
+            self.edge_caption.push(old.edge_caption[i].clone());
+        }
+        self.revision = old.revision + 1;
+    }
+
     pub fn selected(&self) -> impl Iterator<Item = NodeIx> + '_ {
         self.node_flags
             .iter()
@@ -538,6 +651,32 @@ mod tests {
         let r2 = g.revision();
         g.add_node(1.into(), "x", "", [0.0, 0.0]);
         assert_eq!(g.revision(), r2, "dedupe does not bump");
+    }
+
+    #[test]
+    fn remove_compacts_and_drops_incident_edges() {
+        let mut g = GraphStore::new();
+        let a = g.add_node(1.into(), "x", "a", [0.0, 0.0]);
+        let b = g.add_node(2.into(), "x", "b", [1.0, 0.0]);
+        let c = g.add_node(3.into(), "y", "c", [2.0, 0.0]);
+        g.add_edge(10.into(), a, b, "e");
+        g.add_edge(11.into(), b, c, "e");
+        let ac = g.add_edge(12.into(), a, c, "f");
+        g.set_flag(c, flags::PINNED, true);
+        g.remove(&[b], &[ac]);
+        assert_eq!(g.node_count(), 2);
+        assert_eq!(
+            g.edge_count(),
+            0,
+            "b's edges go with it; a-c was removed explicitly"
+        );
+        let c2 = g.node_by_ext(&3.into()).unwrap();
+        assert_eq!(c2, NodeIx(1));
+        assert_eq!(g.position(c2), [2.0, 0.0]);
+        assert!(g.has_flag(c2, flags::PINNED));
+        assert_eq!(g.caption(c2).as_ref(), "c");
+        assert_eq!(g.node_by_ext(&2.into()), None);
+        assert_eq!(g.vertex_label_name(g.node_label(c2)), "y");
     }
 
     #[test]

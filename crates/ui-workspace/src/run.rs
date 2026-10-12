@@ -14,7 +14,7 @@ use gpui_kit::*;
 use gremlin_client::{Error as ClientError, Request};
 use gremlin_model::GValue;
 use providers::read_only;
-use ui_results::graph_view::LayoutSettings;
+use ui_results::graph_view::{LayoutSettings, MutationRequest};
 use ui_results::{
     FetchRequest, GraphView, GraphViewEvent, ResultSet, RunError, RunStatus, error_range,
 };
@@ -118,10 +118,16 @@ impl Runner {
             })
             .detach();
         }
-        self._graph_subscriptions.push(cx.subscribe(
+        self._graph_subscriptions.push(cx.subscribe_in(
             &graph,
-            move |this, graph, event: &GraphViewEvent, cx| match event {
-                GraphViewEvent::Fetch(request) => this.fetch(tab, graph, request.clone(), cx),
+            window,
+            move |this, graph, event: &GraphViewEvent, window, cx| match event {
+                GraphViewEvent::Fetch(request) => {
+                    this.fetch(tab, graph.clone(), request.clone(), cx)
+                }
+                GraphViewEvent::Mutate(request) => {
+                    this.mutate(tab, graph.clone(), request.clone(), window, cx)
+                }
                 GraphViewEvent::LayoutChanged(settings) => {
                     if let Some(storage) = AppSettings::storage(cx) {
                         let write = storage.set_json(
@@ -141,6 +147,125 @@ impl Runner {
             },
         ));
         self.graphs.insert(tab, graph);
+    }
+
+    /// Run a confirmed data change from the graph. Production and read-only connections ask once more,
+    /// naming the connection.
+    fn mutate(
+        &mut self,
+        tab: Uuid,
+        graph: Entity<GraphView>,
+        request: MutationRequest,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let manager = ConnectionManager::global(cx);
+        let Some(config) = self
+            .tab_connection
+            .get(&tab)
+            .and_then(|id| manager.read(cx).get(*id).cloned())
+        else {
+            graph.update(cx, |g, cx| {
+                g.apply_mutation(request.id, Err("no connection".into()), cx)
+            });
+            return;
+        };
+        let production = config.environment == providers::Environment::Production;
+        if !(production || config.read_only) {
+            self.run_mutation(config.id, graph, request, cx);
+            return;
+        }
+        let why = if production {
+            "a production connection"
+        } else {
+            "a read-only connection"
+        };
+        let name = config.name.clone();
+        let description = format!(
+            "“{name}” is {why}. {} — this changes data in the database.",
+            request.description
+        );
+        let runner = cx.weak_entity();
+        let connection_id = config.id;
+        window.open_alert_dialog(cx, move |alert, _, cx| {
+            let runner = runner.clone();
+            let graph = graph.clone();
+            let request = request.clone();
+            let cancel_graph = graph.clone();
+            let cancel_id = request.id;
+            alert
+                .icon(Icon::new(IconName::TriangleAlert).text_color(cx.theme().warning))
+                .title(format!("Change data on “{name}”?"))
+                .description(description.clone())
+                .ok_text(format!("Run on {name}"))
+                .ok_variant(ButtonVariant::Danger)
+                .show_cancel(true)
+                .on_ok(move |_, _, cx| {
+                    let graph = graph.clone();
+                    let request = request.clone();
+                    let _ = runner.update(cx, |r, cx| {
+                        r.run_mutation(connection_id, graph, request, cx)
+                    });
+                    true
+                })
+                .on_cancel(move |_, _, cx| {
+                    cancel_graph.update(cx, |g, cx| {
+                        g.apply_mutation(cancel_id, Err("cancelled".into()), cx)
+                    });
+                    true
+                })
+        });
+    }
+
+    fn run_mutation(
+        &mut self,
+        connection_id: Uuid,
+        graph: Entity<GraphView>,
+        request: MutationRequest,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let manager = ConnectionManager::global(cx);
+        let timeout = manager
+            .read(cx)
+            .get(connection_id)
+            .map(|c| Duration::from_millis(c.timeout_ms))
+            .unwrap_or(Duration::from_secs(30));
+        cx.spawn(async move |_, cx| {
+            let needs_connect = manager.read_with(cx, |m, _| m.session(connection_id).is_none());
+            if needs_connect {
+                manager
+                    .update(cx, |m, cx| m.connect(connection_id, cx))
+                    .await;
+            }
+            let client = manager.read_with(cx, |m, _| {
+                m.session(connection_id).map(|s| s.client.clone())
+            });
+            let result = match client {
+                None => Err("not connected".to_owned()),
+                Some(client) => {
+                    let statement = request.statement.clone();
+                    let work = cx.update(|cx| {
+                        spawn_io(cx, async move {
+                            let mut req = Request::new(statement.script).timeout(timeout);
+                            for (k, v) in statement.bindings {
+                                req = req.binding(k, v);
+                            }
+                            client
+                                .execute_request(req)
+                                .await
+                                .map(|r| r.items)
+                                .map_err(|e| e.to_string())
+                        })
+                    });
+                    match work.await {
+                        Ok(r) => r,
+                        Err(err) => Err(err.to_string()),
+                    }
+                }
+            };
+            graph.update(cx, |g, cx| g.apply_mutation(request.id, result, cx));
+        })
+        .detach();
     }
 
     /// Run a graph follow-up query on the tab's connection and hand the items back to the graph.

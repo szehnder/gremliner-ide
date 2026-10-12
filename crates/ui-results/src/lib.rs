@@ -3,6 +3,7 @@
 
 pub mod console_view;
 pub mod graph_view;
+pub mod inspector;
 pub mod json_view;
 pub mod result_set;
 pub mod results_view;

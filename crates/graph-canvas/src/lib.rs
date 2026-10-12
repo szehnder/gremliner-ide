@@ -44,6 +44,8 @@ const MINIMAP_MARGIN: f32 = 12.0;
 pub enum CanvasEvent {
     /// A node was double-clicked (expand its neighbours).
     NodeDoubleClicked(NodeIx),
+    /// The user Alt-dragged from one node to another (create an edge).
+    LinkRequested { from: NodeIx, to: NodeIx },
 }
 
 /// A camera tween (find-in-graph focus, fit).
@@ -62,9 +64,23 @@ const CAMERA_TWEEN_MS: f32 = 320.0;
 
 enum Drag {
     None,
-    Pan { last: Vec2, last_time: Instant },
-    Node { node: NodeIx, grab_offset: Vec2 },
-    Rect { start: Vec2, current: Vec2 },
+    Pan {
+        last: Vec2,
+        last_time: Instant,
+    },
+    Node {
+        node: NodeIx,
+        grab_offset: Vec2,
+    },
+    Rect {
+        start: Vec2,
+        current: Vec2,
+    },
+    /// Alt-drag from a node: a rubber-band line to the pointer.
+    Link {
+        from: NodeIx,
+        current: Vec2,
+    },
     Minimap,
 }
 
@@ -321,6 +337,17 @@ impl GraphCanvas {
         self.context_node
     }
 
+    /// Drop every node index the canvas holds (after elements were removed and indices compacted).
+    pub fn forget_indices(&mut self) {
+        self.hovered = None;
+        self.context_node = None;
+        self.drag = Drag::None;
+        self.grid = None;
+        if let Some(anim) = self.camera_anim.as_mut() {
+            anim.follow = None;
+        }
+    }
+
     pub fn hovered(&self) -> Option<NodeIx> {
         self.hovered
     }
@@ -462,6 +489,28 @@ impl GraphCanvas {
         }
     }
 
+    /// The visible edge closest to screen point `s` within a few pixels.
+    fn edge_at_screen(&self, s: Vec2) -> Option<graph_store::EdgeIx> {
+        let vp = self.viewport();
+        let g = &self.store;
+        let (srcs, dsts) = g.edge_endpoints();
+        let flags_e = g.edge_flags();
+        let nf = g.node_flags();
+        let mut best: Option<(f32, u32)> = None;
+        for (i, (a, b)) in srcs.iter().zip(dsts).enumerate() {
+            if (flags_e[i] | nf[a.0 as usize] | nf[b.0 as usize]) & flags::HIDDEN != 0 {
+                continue;
+            }
+            let pa = self.camera.world_to_screen(g.position(*a), vp);
+            let pb = self.camera.world_to_screen(g.position(*b), vp);
+            let d = graph_store::view::point_segment_distance(s, pa, pb);
+            if d <= 4.0 && best.is_none_or(|(bd, _)| d < bd) {
+                best = Some((d, i as u32));
+            }
+        }
+        best.map(|(_, i)| graph_store::EdgeIx(i))
+    }
+
     fn node_at_screen(&mut self, s: Vec2) -> Option<NodeIx> {
         let world = self.camera.screen_to_world(s, self.viewport());
         let radius = self.params.node_radius.max(5.0 / self.camera.zoom);
@@ -562,11 +611,19 @@ impl GraphCanvas {
             if ev.click_count == 2 && !ev.modifiers.shift {
                 cx.emit(CanvasEvent::NodeDoubleClicked(n));
             }
+            if ev.modifiers.alt {
+                self.drag = Drag::Link {
+                    from: n,
+                    current: s,
+                };
+                cx.notify();
+                return;
+            }
             if ev.modifiers.shift {
                 let on = !self.store.has_flag(n, flags::SELECTED);
                 self.graph_mut().set_flag(n, flags::SELECTED, on);
             } else if !self.store.has_flag(n, flags::SELECTED) {
-                self.graph_mut().clear_flag(flags::SELECTED);
+                self.graph_mut().clear_selection();
                 self.graph_mut().set_flag(n, flags::SELECTED, true);
             }
             let world = self.camera.screen_to_world(s, self.viewport());
@@ -582,7 +639,11 @@ impl GraphCanvas {
             };
         } else {
             if ev.click_count == 1 {
-                self.graph_mut().clear_flag(flags::SELECTED);
+                // A click near an edge selects it; elsewhere it clears the selection.
+                match self.edge_at_screen(s) {
+                    Some(e) => self.graph_mut().select_edge(e, false),
+                    None => self.graph_mut().clear_selection(),
+                }
             }
             self.drag = Drag::Pan {
                 last: s,
@@ -609,7 +670,7 @@ impl GraphCanvas {
         if let Some(n) = self.context_node
             && !self.store.has_flag(n, flags::SELECTED)
         {
-            self.graph_mut().clear_flag(flags::SELECTED);
+            self.graph_mut().clear_selection();
             self.graph_mut().set_flag(n, flags::SELECTED, true);
         }
         cx.notify();
@@ -645,7 +706,7 @@ impl GraphCanvas {
                     worker.pin(node.0, Some(p));
                 }
             }
-            Drag::Rect { current, .. } => *current = s,
+            Drag::Rect { current, .. } | Drag::Link { current, .. } => *current = s,
             Drag::Minimap => self.center_from_minimap(s),
             Drag::None => {
                 let hovered = if self.in_minimap(s) {
@@ -669,6 +730,13 @@ impl GraphCanvas {
         cx: &mut Context<'_, Self>,
     ) {
         match std::mem::replace(&mut self.drag, Drag::None) {
+            Drag::Link { from, current } => {
+                if let Some(to) = self.node_at_screen(current)
+                    && to != from
+                {
+                    cx.emit(CanvasEvent::LinkRequested { from, to });
+                }
+            }
             Drag::Node { node, .. } => self.graph_mut().set_flag(node, flags::PINNED, true),
             Drag::Rect { start, current } => {
                 let vp = self.viewport();
@@ -721,7 +789,7 @@ impl GraphCanvas {
             "f" => self.fit_to_view(),
             "m" => self.show_minimap = !self.show_minimap,
             "p" => self.perf_hud = !self.perf_hud,
-            "escape" => self.graph_mut().clear_flag(flags::SELECTED),
+            "escape" => self.graph_mut().clear_selection(),
             _ => return,
         }
         cx.notify();
@@ -987,6 +1055,20 @@ fn paint_overlays(
             size(px(r[2] - r[0]), px(r[3] - r[1])),
         )
     };
+
+    if let Drag::Link { from, current } = this.drag
+        && (from.0 as usize) < this.store.node_count()
+    {
+        let a = this
+            .camera
+            .world_to_screen(this.store.position(from), this.viewport());
+        let mut path = gpui_kit::PathBuilder::stroke(this.style.link_width);
+        path.move_to(point(px(a[0] + o[0]), px(a[1] + o[1])));
+        path.line_to(point(px(current[0] + o[0]), px(current[1] + o[1])));
+        if let Ok(path) = path.build() {
+            window.paint_path(path, this.style.selection);
+        }
+    }
 
     if let Drag::Rect { start, current } = this.drag {
         let r = rect_from_points(start, current);

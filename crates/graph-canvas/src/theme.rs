@@ -23,6 +23,8 @@ pub struct CanvasStyle {
     pub hud_text: Hsla,
     pub minimap_radius: Pixels,
     pub hud_radius: Pixels,
+    /// Width of the Alt-drag link line.
+    pub link_width: Pixels,
     /// Icon colour on light node fills, and on dark ones.
     pub icon_on_light: Hsla,
     pub icon_on_dark: Hsla,
@@ -85,6 +87,7 @@ impl CanvasStyle {
             hud_text: hsla(120.0 / 360.0, 0.6, 0.75, 1.0),
             minimap_radius: px(6.0),
             hud_radius: px(4.0),
+            link_width: px(2.0),
             icon_on_light: hsla(0.0, 0.0, 0.1, 0.9),
             icon_on_dark: hsla(0.0, 0.0, 1.0, 0.95),
         }
@@ -123,6 +126,7 @@ impl CanvasStyle {
             hud_text: hsla(120.0 / 360.0, 0.6, 0.75, 1.0),
             minimap_radius: px(6.0),
             hud_radius: px(4.0),
+            link_width: px(2.0),
             icon_on_light: hsla(0.0, 0.0, 0.1, 0.9),
             icon_on_dark: hsla(0.0, 0.0, 1.0, 0.95),
         }

@@ -228,7 +228,7 @@ pub fn build_scene(
             continue; // sub-pixel edge, invisible
         }
         let (ux, uy) = (dx / l, dy / l);
-        let highlight = (fs | fd) & flags::SELECTED != 0;
+        let highlight = (fs | fd | edge_flags[i]) & flags::SELECTED != 0;
         if !highlight && params.subset != Subset::All {
             continue;
         }

@@ -45,5 +45,12 @@ pub fn bind_default_keys(cx: &mut App) {
         KeyBinding::new("e", graph::ExpandSelection, Some(GRAPH_CANVAS)),
         KeyBinding::new("f", graph::FitGraph, Some(GRAPH_CANVAS)),
         KeyBinding::new("secondary-f", graph::FindInGraph, Some(GRAPH_VIEW)),
+        KeyBinding::new(
+            "shift-delete",
+            graph::DeleteFromDatabase,
+            Some(GRAPH_CANVAS),
+        ),
+        KeyBinding::new("secondary-shift-z", graph::RedoEdit, Some(GRAPH_CANVAS)),
+        KeyBinding::new("secondary-z", graph::UndoEdit, Some(GRAPH_CANVAS)),
     ]);
 }

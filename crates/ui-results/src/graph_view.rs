@@ -12,7 +12,9 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::spinner::Spinner;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{
+    ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, h_flex, v_flex,
+};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use graph_canvas::theme::CanvasStyle;
@@ -27,6 +29,9 @@ use gremlin_model::elements::{ElementSet, elements};
 use gremlin_model::{GValue, console};
 
 use crate::style_library::StyleLibrary;
+
+mod edit;
+pub use edit::{MutationRequest, Proposal, SelectedElement, parse_typed, value_type_names};
 use ui_theme::Tokens;
 
 actions!(
@@ -44,6 +49,10 @@ actions!(
         ClearGraph,
         RerunLayout,
         StopLayout,
+        UndoEdit,
+        RedoEdit,
+        DeleteFromDatabase,
+        NewVertex,
     ]
 );
 
@@ -175,6 +184,10 @@ pub enum FetchKind {
         direction: ExpandDirection,
         label: Option<String>,
     },
+    /// In and out degree for the inspector.
+    Degree(ExtId),
+    /// Incident edges of vertices about to be deleted (for the confirmation's counts).
+    IncidentCount(u64),
 }
 
 /// A follow-up query for the host to run against the tab's connection.
@@ -193,6 +206,8 @@ pub enum GraphViewEvent {
     ShowInTable(String),
     /// The layout choice or options changed (persist them for the tab).
     LayoutChanged(LayoutSettings),
+    /// The user confirmed a data change; run it and answer with [`GraphView::apply_mutation`].
+    Mutate(edit::MutationRequest),
 }
 
 /// Counts for the status text.
@@ -275,6 +290,7 @@ pub struct GraphView {
     style_dark: Option<bool>,
     matches: Vec<NodeIx>,
     match_ix: usize,
+    edit: edit::EditState,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -300,6 +316,7 @@ impl GraphView {
                     CanvasEvent::NodeDoubleClicked(n) => {
                         this.expand(*n, ExpandDirection::Both, None, cx);
                     }
+                    CanvasEvent::LinkRequested { from, to } => this.start_link(*from, *to, cx),
                 }),
                 cx.observe(&canvas, |_, _, cx| cx.notify()),
                 cx.observe(&library, |this: &mut Self, _, cx| this.restyle(cx)),
@@ -363,6 +380,7 @@ impl GraphView {
             style_dark: None,
             matches: Vec::new(),
             match_ix: 0,
+            edit: edit::EditState::new(window, cx),
             _subscriptions: subscriptions,
         }
     }
@@ -456,6 +474,7 @@ impl GraphView {
     pub fn clear(&mut self, cx: &mut Context<'_, Self>) {
         self.generation += 1;
         self.ids.clear();
+        self.edit.forget_elements();
         self.requested.clear();
         self.more = None;
         self.notice = None;
@@ -675,6 +694,7 @@ impl GraphView {
         let mut delta = GraphDelta::default();
         for v in set.vertices {
             let id = self.remember(&v.id);
+            self.remember_vertex(&id, &v);
             let props: Props = v
                 .properties
                 .iter()
@@ -694,6 +714,7 @@ impl GraphView {
         }
         for e in set.edges {
             let id = ext_id(&e.id);
+            self.remember_edge(&id, &e);
             let out_v = self.remember(&e.out_v);
             let in_v = self.remember(&e.in_v);
             let props: Props = e
@@ -868,6 +889,8 @@ impl GraphView {
                     FetchKind::Endpoints => "edge endpoints",
                     FetchKind::EdgesBetween => "edges between vertices",
                     FetchKind::Expand { .. } | FetchKind::ExpandCount { .. } => "neighbours",
+                    FetchKind::Degree(_) => "the degree",
+                    FetchKind::IncidentCount(_) => "incident edges",
                 };
                 self.notice = Some(format!("Couldn't fetch {what}: {message}").into());
                 return;
@@ -955,6 +978,8 @@ impl GraphView {
                     m.total = total.and_then(|t| u64::try_from(t).ok());
                 }
             }
+            FetchKind::Degree(node) => self.apply_degree(node, &items),
+            FetchKind::IncidentCount(proposal) => self.apply_incident_count(*proposal, &items),
         }
         cx.notify();
     }
@@ -1173,6 +1198,24 @@ impl GraphView {
                     .tooltip("Re-run layout")
                     .on_click(cx.listener(|this, _, _, cx| this.rerun_layout(cx)))
             })
+            .child(
+                Button::new("graph-undo")
+                    .icon(Icon::new(IconName::Undo))
+                    .ghost()
+                    .xsmall()
+                    .disabled(!self.can_undo())
+                    .tooltip("Undo the last edit (with preview)")
+                    .on_click(cx.listener(|this, _, _, cx| this.undo(cx))),
+            )
+            .child(
+                Button::new("graph-redo")
+                    .icon(Icon::new(IconName::Redo))
+                    .ghost()
+                    .xsmall()
+                    .disabled(!self.can_redo())
+                    .tooltip("Redo (with preview)")
+                    .on_click(cx.listener(|this, _, _, cx| this.redo(cx))),
+            )
             .child(
                 div()
                     .w(Tokens::BORDER)
@@ -1678,6 +1721,7 @@ fn context_menu(
             .separator()
             .menu("Select neighbours", Box::new(SelectNeighbours))
             .menu("Hide", Box::new(HideSelection))
+            .menu("Delete from database…", Box::new(DeleteFromDatabase))
             .when(pinned, |m| m.menu("Unpin", Box::new(UnpinSelection)))
             .when(!pinned, |m| m.menu("Pin", Box::new(PinSelection)))
             .separator()
@@ -1701,7 +1745,8 @@ fn context_menu(
             })
             .separator();
     }
-    menu.menu("Select all", Box::new(SelectAll))
+    menu.menu("New vertex…", Box::new(NewVertex))
+        .menu("Select all", Box::new(SelectAll))
         .menu("Unhide all", Box::new(UnhideAll))
         .menu("Fit to view", Box::new(FitGraph))
 }
@@ -1737,6 +1782,10 @@ impl Render for GraphView {
             .on_action(cx.listener(|this, _: &ClearGraph, _, cx| this.clear(cx)))
             .on_action(cx.listener(|this, _: &RerunLayout, _, cx| this.rerun_layout(cx)))
             .on_action(cx.listener(|this, _: &StopLayout, _, cx| this.stop_layout(cx)))
+            .on_action(cx.listener(|this, _: &UndoEdit, _, cx| this.undo(cx)))
+            .on_action(cx.listener(|this, _: &RedoEdit, _, cx| this.redo(cx)))
+            .on_action(cx.listener(|this, _: &DeleteFromDatabase, _, cx| this.delete_selection(cx)))
+            .on_action(cx.listener(|this, _: &NewVertex, _, cx| this.start_new_vertex(cx)))
             .on_action(cx.listener(|this, _: &FitGraph, _, cx| {
                 this.canvas.update(cx, |c, cx| {
                     c.request_fit();
@@ -1808,6 +1857,7 @@ impl GraphView {
             .when(self.show_filter, |el| el.child(self.render_filter(cx)))
             .children(self.render_more(cx))
             .children(self.render_notice(cx))
+            .children(self.render_edit_overlay(cx))
     }
 }
 

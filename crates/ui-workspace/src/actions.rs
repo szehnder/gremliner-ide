@@ -29,8 +29,9 @@ actions!(
 /// Graph view commands, declared by `ui-results` and re-exported for the palette and keymap.
 pub mod graph {
     pub use ui_results::graph_view::{
-        ClearGraph, ExpandSelection, FindInGraph, FitGraph, HideSelection, PinSelection,
-        RerunLayout, SelectAll, SelectNeighbours, StopLayout, UnhideAll, UnpinSelection,
+        ClearGraph, DeleteFromDatabase, ExpandSelection, FindInGraph, FitGraph, HideSelection,
+        NewVertex, PinSelection, RedoEdit, RerunLayout, SelectAll, SelectNeighbours, StopLayout,
+        UndoEdit, UnhideAll, UnpinSelection,
     };
 }
 

@@ -127,6 +127,14 @@ fn register_commands(cx: &mut App) {
             .when(When::GraphFocused)
             .keywords(&["layout", "arrange"]),
         CommandMeta::new("Graph", "Stop Layout", graph::StopLayout).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Undo Edit", graph::UndoEdit).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Redo Edit", graph::RedoEdit).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Delete from Database", graph::DeleteFromDatabase)
+            .when(When::GraphFocused)
+            .keywords(&["drop", "remove"]),
+        CommandMeta::new("Graph", "New Vertex", graph::NewVertex)
+            .when(When::GraphFocused)
+            .keywords(&["create", "add"]),
         CommandMeta::new("Application", "Quit", Quit).keywords(&["exit"]),
     ] {
         CommandRegistry::register(cx, meta);
