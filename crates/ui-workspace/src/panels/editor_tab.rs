@@ -178,7 +178,7 @@ impl EditorPanel {
                     .update(cx, |s, cx| s.set_selected_range(cursor..cursor, cx));
             });
             let manager = ConnectionManager::global(cx);
-            let subscriptions = vec![
+            let mut subscriptions = vec![
                 cx.subscribe(
                     &editor,
                     |this: &mut Self, _, event: &QueryEditorEvent, cx| match event {
@@ -190,6 +190,10 @@ impl EditorPanel {
                 ),
                 cx.observe(&manager, |_, _, cx| cx.notify()),
             ];
+            if let Some(registry) = crate::schema::SchemaRegistry::try_global(cx) {
+                subscriptions
+                    .push(cx.observe(&registry, |this: &mut Self, _, cx| this.sync_schema(cx)));
+            }
             let id = Uuid::parse_str(&row.id).unwrap_or_else(|_| Uuid::new_v4());
             Self {
                 id,
@@ -207,6 +211,7 @@ impl EditorPanel {
                 _subscriptions: subscriptions,
             }
         });
+        tab.update(cx, |t, cx| t.sync_schema(cx));
         EditorTabs::global(cx).update(cx, |t, cx| t.add(&tab, cx));
         // Make sure a brand-new tab exists in storage, so a layout referencing it can be restored.
         tab.update(cx, |t, cx| t.save_now(cx));
@@ -233,8 +238,19 @@ impl EditorPanel {
         self.title.clone()
     }
 
+    /// Give the editor the schema of this tab's connection (for completions and warnings).
+    fn sync_schema(&mut self, cx: &mut Context<'_, Self>) {
+        let schema = self.connection_id.and_then(|id| {
+            crate::schema::SchemaRegistry::try_global(cx)?
+                .read(cx)
+                .schema(id)
+        });
+        self.editor.update(cx, |e, cx| e.set_schema(schema, cx));
+    }
+
     pub fn set_connection(&mut self, id: Option<Uuid>, cx: &mut Context<'_, Self>) {
         self.connection_id = id;
+        self.sync_schema(cx);
         if let Some(id) = id {
             ConnectionManager::global(cx).update(cx, |m, cx| m.set_active(Some(id), cx));
         }

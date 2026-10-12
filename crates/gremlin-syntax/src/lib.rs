@@ -3,6 +3,7 @@
 //! debugger, formatting and step documentation.
 
 pub mod catalogue;
+pub mod complete;
 pub mod document;
 pub mod format;
 pub mod language;

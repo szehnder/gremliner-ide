@@ -162,3 +162,21 @@ workspace handles them in `on_action`.
 `dock.read(cx).layout(DockPlacement::Center)?.panels()` yields `PanelId`s. Then
 `dock.read(cx).panel(id)?.view().downcast::<MyPanel>()` returns the `Entity` to inspect, for example to reuse
 a tab, and `dock.select_panel(id, window, cx)` focuses it.
+
+## Editor completion, code actions and auto-pairs (gpui-kit 0.7)
+
+- `state.lsp_mut().completion_provider = Some(Rc::new(..))`. The provider filters and ranks itself, and the
+  menu shows items in the order given. Return `text_edit` ranges, built with
+  `rope.offset_to_position(byte)`, so the typed prefix is replaced. `is_completion_trigger` runs per edit
+  on the main thread. `completion_menu_state()` (doc-hidden) exposes `open` and `items` for tests.
+- There are no snippet tab stops and no signature-help popover, so we place the cursor and render the
+  signature strip ourselves.
+- The editor auto-closes `(` and quotes when typing, but not text inserted by a completion.
+- `code_action_providers` is a list of `CodeActionProvider`s, opened with Ctrl+. (built in).
+  `perform_code_action` is called inside the editor state's update, so edit the state in
+  `window.defer(cx, ..)` or it panics with "already being updated".
+
+## Dialogs animate in
+
+`open_dialog` and alert dialogs slide and fade in over real time. In headless tests, wait for the
+target's bounds to stop changing before `window.click` (see `crates/ui-workspace/tests/support`).

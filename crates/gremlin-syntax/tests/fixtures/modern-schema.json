@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "discovered_at_ms": 1791783689822,
+  "source": "sampled",
+  "partial": {
+    "labels": false,
+    "properties": false,
+    "counts": false,
+    "triples": false
+  },
+  "vertex_labels": [
+    {
+      "name": "person",
+      "count": {
+        "value": 4
+      },
+      "properties": [
+        {
+          "key": "age",
+          "types": [
+            "Int32"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "32",
+            "35",
+            "27",
+            "29"
+          ]
+        },
+        {
+          "key": "name",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "josh",
+            "peter",
+            "vadas",
+            "marko"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "software",
+      "count": {
+        "value": 2
+      },
+      "properties": [
+        {
+          "key": "lang",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "java"
+          ]
+        },
+        {
+          "key": "name",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "ripple",
+            "lop"
+          ]
+        }
+      ]
+    }
+  ],
+  "edge_labels": [
+    {
+      "name": "created",
+      "count": {
+        "value": 4
+      },
+      "properties": [
+        {
+          "key": "weight",
+          "types": [
+            "Double"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "1.0",
+            "0.4",
+            "0.2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "knows",
+      "count": {
+        "value": 2
+      },
+      "properties": [
+        {
+          "key": "weight",
+          "types": [
+            "Double"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "0.5",
+            "1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "triples": [
+    {
+      "out": "person",
+      "label": "created",
+      "in": "software"
+    },
+    {
+      "out": "person",
+      "label": "knows",
+      "in": "person"
+    }
+  ]
+}

@@ -1,0 +1,383 @@
+{
+  "schema_version": 1,
+  "discovered_at_ms": 1791783689319,
+  "source": "sampled",
+  "partial": {
+    "labels": false,
+    "properties": false,
+    "counts": false,
+    "triples": false
+  },
+  "vertex_labels": [
+    {
+      "name": "airport",
+      "count": {
+        "value": 3504
+      },
+      "properties": [
+        {
+          "key": "city",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "Udaipur",
+            "Elim",
+            "Indore",
+            "San Jose",
+            "Can Tho"
+          ]
+        },
+        {
+          "key": "code",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "SCQ",
+            "BBA",
+            "JRH",
+            "SCU",
+            "SCT"
+          ]
+        },
+        {
+          "key": "country",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "PR",
+            "PT",
+            "PW",
+            "PY",
+            "QA"
+          ]
+        },
+        {
+          "key": "desc",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "Chongqing Jiangbei International Airport",
+            "Longyan Guanzhishan Airport",
+            "Mo i Rana Airport, Røssvoll",
+            "Savannakhet Airport",
+            "Chokurdakh Airport"
+          ]
+        },
+        {
+          "key": "elev",
+          "types": [
+            "Int32"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "4100"
+          ]
+        },
+        {
+          "key": "icao",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "LGKS",
+            "LGKR",
+            "VLXK",
+            "LGKP",
+            "LGKV"
+          ]
+        },
+        {
+          "key": "lat",
+          "types": [
+            "Double"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "16.9999008179",
+            "45.0021018981934",
+            "64.1932983398",
+            "-29.3815994263",
+            "23.1613998413"
+          ]
+        },
+        {
+          "key": "lon",
+          "types": [
+            "Double"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "135.363998413",
+            "101.004997253418",
+            "-89.6932983398",
+            "35.7526016235352",
+            "20.5004997253418"
+          ]
+        },
+        {
+          "key": "longest",
+          "types": [
+            "Int32"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "8192",
+            "8195",
+            "8196",
+            "4101",
+            "8197"
+          ]
+        },
+        {
+          "key": "region",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "NZ-BOP",
+            "MZ-A",
+            "MZ-B",
+            "IN-TN",
+            "MZ-N"
+          ]
+        },
+        {
+          "key": "runways",
+          "types": [
+            "Int32"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "key": "type",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "airport"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "continent",
+      "count": {
+        "value": 7
+      },
+      "properties": [
+        {
+          "key": "code",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "EU",
+            "AS",
+            "NA",
+            "OC",
+            "AF"
+          ]
+        },
+        {
+          "key": "desc",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "South America",
+            "Asia",
+            "Europe",
+            "Africa",
+            "Antarctica"
+          ]
+        },
+        {
+          "key": "type",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "continent"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "country",
+      "count": {
+        "value": 237
+      },
+      "properties": [
+        {
+          "key": "code",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "PR",
+            "PT",
+            "PW",
+            "PY",
+            "QA"
+          ]
+        },
+        {
+          "key": "desc",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "Papua New Guinea",
+            "Cambodia",
+            "Kazakhstan",
+            "Paraguay",
+            "Bahamas"
+          ]
+        },
+        {
+          "key": "type",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "country"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "version",
+      "count": {
+        "value": 1
+      },
+      "properties": [
+        {
+          "key": "author",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "Kelvin R. Lawrence"
+          ]
+        },
+        {
+          "key": "code",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "0.89"
+          ]
+        },
+        {
+          "key": "date",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "2022-08-29 14:10:18 UTC"
+          ]
+        },
+        {
+          "key": "desc",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "Air Routes Data - Version: 0.89 Generated: 2022-08-29 14:10:18 …"
+          ]
+        },
+        {
+          "key": "type",
+          "types": [
+            "String"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "version"
+          ]
+        }
+      ]
+    }
+  ],
+  "edge_labels": [
+    {
+      "name": "contains",
+      "count": {
+        "value": 7008
+      },
+      "properties": []
+    },
+    {
+      "name": "route",
+      "count": {
+        "value": 50637
+      },
+      "properties": [
+        {
+          "key": "dist",
+          "types": [
+            "Int32"
+          ],
+          "cardinality": "single",
+          "samples": [
+            "8197",
+            "23",
+            "32",
+            "39",
+            "45"
+          ]
+        }
+      ]
+    }
+  ],
+  "triples": [
+    {
+      "out": "airport",
+      "label": "route",
+      "in": "airport"
+    },
+    {
+      "out": "continent",
+      "label": "contains",
+      "in": "airport"
+    },
+    {
+      "out": "country",
+      "label": "contains",
+      "in": "airport"
+    }
+  ]
+}

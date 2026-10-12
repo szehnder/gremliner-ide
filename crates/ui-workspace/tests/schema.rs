@@ -380,3 +380,43 @@ fn unknown_labels_in_results_refresh_the_schema(cx: &mut TestAppContext) {
     );
     wait_discovered(&mut env, id);
 }
+
+#[gpui_kit::test]
+fn editor_tabs_get_their_connections_schema(cx: &mut TestAppContext) {
+    if !testenv_up() {
+        return;
+    }
+    let mut env = setup(cx);
+    let id = connection(&mut env, "Air", "g");
+    let ws = env.ws.clone();
+    let tab = env
+        .cx
+        .update(|window, cx| ws.update(cx, |ws, cx| ws.new_tab(window, cx)));
+    env.cx
+        .update(|_, cx| tab.update(cx, |t, cx| t.set_connection(Some(id), cx)));
+    let editor = env.cx.update(|_, cx| tab.read(cx).editor().clone());
+    assert!(env.cx.update(|_, cx| editor.read(cx).schema().is_none()));
+    connect(&mut env, id);
+    wait_discovered(&mut env, id);
+    let schema = env
+        .cx
+        .update(|_, cx| editor.read(cx).schema())
+        .expect("schema pushed");
+    assert!(schema.vertex_label("airport").is_some());
+    // Completions in the tab now know the labels.
+    env.cx.update(|window, cx| {
+        editor.update(cx, |e, cx| e.set_text("g.V().hasLabel('", window, cx));
+        editor.read(cx).state().clone().update(cx, |s, cx| {
+            s.set_selected_range(16..16, cx);
+        });
+    });
+    let labels: Vec<String> = env.cx.update(|_, cx| {
+        editor
+            .read(cx)
+            .completions_at_cursor(cx)
+            .into_iter()
+            .map(|i| i.label)
+            .collect()
+    });
+    assert!(labels.contains(&"airport".to_owned()), "{labels:?}");
+}

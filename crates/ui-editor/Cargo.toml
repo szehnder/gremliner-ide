@@ -8,6 +8,8 @@ license.workspace = true
 
 [dependencies]
 gremlin-syntax.workspace = true
+schema.workspace = true
+serde_json.workspace = true
 gpui-kit.workspace = true
 ui-theme.workspace = true
 lsp-types.workspace = true

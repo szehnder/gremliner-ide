@@ -3,6 +3,7 @@
 
 use std::ops::Range;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use gpui_kit::component::highlighter::{Diagnostic as EditorDiagnostic, DiagnosticSeverity};
 use gpui_kit::component::input::{
@@ -12,9 +13,14 @@ use gpui_kit::component::input::{
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
+use gremlin_syntax::complete::{SignatureHelp, schema_issues, signature_help};
 use gremlin_syntax::{Diagnostic, Document, Severity, line_col};
+use schema::Schema;
 
 use crate::actions::{FormatQuery, RunQuery, ToggleLineComment};
+use crate::completion::{
+    GremlinCompletions, SchemaFixes, SharedState, apply_replacement, fixes_at,
+};
 use crate::hover::StepHover;
 use crate::language::LANGUAGE_NAME;
 use crate::{comment, tokens};
@@ -48,6 +54,11 @@ pub struct QueryEditor {
     error_highlight: RangeDecorationCollection,
     highlighted: Option<Range<usize>>,
     last_cursor: usize,
+    /// Schema, schema warnings and recent completions, shared with the completion and fix providers.
+    shared: SharedState,
+    signature: Option<SignatureHelp>,
+    /// (text revision, cursor) the signature help was computed for.
+    signature_at: (u64, usize),
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -57,11 +68,18 @@ impl EventEmitter<QueryEditorEvent> for QueryEditor {}
 impl QueryEditor {
     pub fn new(text: &str, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
         let initial = text.to_owned();
+        let shared = SharedState::default();
+        let providers = shared.clone();
         let state = cx.new(|cx| {
             let mut state = EditorState::new(window, cx)
                 .language(LANGUAGE_NAME)
                 .default_value(initial);
             state.lsp_mut().hover_provider = Some(Rc::new(StepHover));
+            state.lsp_mut().completion_provider = Some(Rc::new(GremlinCompletions {
+                shared: providers.clone(),
+            }));
+            state.lsp_mut().code_action_providers =
+                vec![Rc::new(SchemaFixes { shared: providers })];
             state
         });
         let statement_highlight = state.update(cx, |s, cx| {
@@ -71,9 +89,9 @@ impl QueryEditor {
             s.create_range_decorations_collection(Vec::new(), cx)
         });
         let subscriptions = vec![
-            cx.subscribe_in(&state, window, |this, _, event: &InputEvent, _, cx| {
+            cx.subscribe_in(&state, window, |this, _, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::Change) {
-                    this.on_change(cx);
+                    this.on_change(window, cx);
                 }
             }),
             // Cursor moves notify the editor state; keep the statement highlight in step.
@@ -91,6 +109,9 @@ impl QueryEditor {
             error_highlight,
             highlighted: None,
             last_cursor: usize::MAX,
+            shared,
+            signature: None,
+            signature_at: (u64::MAX, usize::MAX),
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
         };
@@ -129,9 +150,10 @@ impl QueryEditor {
 
     /// Mirror the edit into the analysis document as one incremental edit (common prefix/suffix diff
     /// against the previous text). Large documents are analysed on a background thread.
-    fn on_change(&mut self, cx: &mut Context<'_, Self>) {
+    fn on_change(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let new = self.state.read(cx).text().to_string();
         let (range, inserted) = diff(&self.latest_text, &new);
+        self.after_completion(&new, &inserted, window, cx);
         self.latest_text = new;
         self.revision += 1;
         self.error_highlight.clear(cx);
@@ -164,6 +186,7 @@ impl QueryEditor {
                 this.analysed_revision = revision;
                 this.analysis = None;
                 this.diagnostics = diagnostics;
+                this.add_schema_warnings();
                 this.push_diagnostics(cx);
                 this.highlighted = None;
                 this.last_cursor = usize::MAX;
@@ -201,7 +224,127 @@ impl QueryEditor {
 
     fn publish_diagnostics(&mut self, cx: &mut Context<'_, Self>) {
         self.diagnostics = self.doc.diagnostics();
+        self.add_schema_warnings();
         self.push_diagnostics(cx);
+    }
+
+    /// Use `schema` for completions and warnings (`None`: catalogue-only completions, no warnings).
+    pub fn set_schema(&mut self, schema: Option<Arc<Schema>>, cx: &mut Context<'_, Self>) {
+        let same = match (&self.shared.borrow().schema, &schema) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        if same {
+            return;
+        }
+        self.shared.borrow_mut().schema = schema;
+        self.signature_at = (u64::MAX, usize::MAX);
+        self.publish_diagnostics(cx);
+        cx.notify();
+    }
+
+    pub fn schema(&self) -> Option<Arc<Schema>> {
+        self.shared.borrow().schema.clone()
+    }
+
+    /// Append warnings for labels and keys the schema does not know (only once a schema exists).
+    fn add_schema_warnings(&mut self) {
+        let mut shared = self.shared.borrow_mut();
+        shared.issues = match &shared.schema {
+            Some(schema) => schema_issues(self.doc.text(), schema),
+            None => Vec::new(),
+        };
+        for issue in &shared.issues {
+            self.diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                range: issue.range.clone(),
+                message: issue.message.clone(),
+            });
+        }
+        self.diagnostics.sort_by_key(|d| d.range.start);
+    }
+
+    /// Quick fixes at `offset`: (title, range, replacement).
+    pub fn quick_fixes_at(&self, offset: usize) -> Vec<(String, Range<usize>, String)> {
+        fixes_at(&self.shared.borrow(), &(offset..offset))
+    }
+
+    /// Apply the first quick fix at `offset`; false when there is none.
+    pub fn apply_quick_fix(
+        &mut self,
+        offset: usize,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> bool {
+        let Some((_, range, text)) = self.quick_fixes_at(offset).into_iter().next() else {
+            return false;
+        };
+        apply_replacement(&self.state, range, &text, window, cx);
+        true
+    }
+
+    /// The completions the editor would offer at the cursor (what the menu shows).
+    pub fn completions_at_cursor(&self, cx: &App) -> Vec<gremlin_syntax::complete::Item> {
+        let text = self.state.read(cx).value().to_string();
+        let cursor = self.state.read(cx).cursor();
+        crate::completion::items_at(&self.shared.borrow(), &text, cursor).1
+    }
+
+    /// After a completion inserted `name()` or a snippet, put the cursor where the item asks.
+    fn after_completion(
+        &mut self,
+        text: &str,
+        inserted: &str,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if inserted.chars().count() < 2 {
+            return;
+        }
+        let cursor = self.state.read(cx).cursor();
+        let target = {
+            let shared = self.shared.borrow();
+            shared.offered.iter().find_map(|(insert, at)| {
+                let start = cursor.checked_sub(insert.len())?;
+                (text.get(start..cursor) == Some(insert.as_str()))
+                    .then(|| (start + at, insert.clone()))
+            })
+        };
+        if let Some((at, insert)) = target {
+            let label: String = insert
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            *self.shared.borrow_mut().recent.entry(label).or_default() += 1;
+            let state = self.state.clone();
+            cx.defer_in(window, move |_, window, cx| {
+                state.update(cx, |s, cx| {
+                    let position = s.text().offset_to_position(at);
+                    s.set_cursor_position(position, window, cx);
+                });
+            });
+        }
+    }
+
+    /// Signature help for the call around the cursor, if any.
+    pub fn signature_help(&self) -> Option<&SignatureHelp> {
+        self.signature.as_ref()
+    }
+
+    fn sync_signature(&mut self, cx: &mut Context<'_, Self>) {
+        let cursor = self.state.read(cx).cursor();
+        let at = (self.revision, cursor);
+        if self.signature_at == at {
+            return;
+        }
+        self.signature_at = at;
+        let text = self.state.read(cx).value().to_string();
+        let help = signature_help(&text, cursor, self.shared.borrow().schema.as_deref());
+        if help != self.signature {
+            self.signature = help;
+            cx.notify();
+        }
     }
 
     /// Hand `self.diagnostics` to the editor for underlines.
@@ -246,6 +389,7 @@ impl QueryEditor {
     }
 
     fn sync_statement_highlight(&mut self, cx: &mut Context<'_, Self>) {
+        self.sync_signature(cx);
         let cursor = self.state.read(cx).cursor();
         if cursor == self.last_cursor {
             return;
@@ -477,9 +621,54 @@ impl Render for QueryEditor {
                     .min_h_0()
                     .child(Editor::new(&self.state).size_full().bordered(false)),
             )
+            .children(
+                self.signature
+                    .as_ref()
+                    .map(|help| render_signature(help, cx)),
+            )
             .when(has_problems, |el| el.child(self.render_problems(cx)))
             .track_focus(&self.focus_handle)
     }
+}
+
+/// The signature strip under the editor: the active form with its current parameter emphasised.
+fn render_signature(help: &SignatureHelp, cx: &App) -> impl IntoElement + use<> {
+    let theme = cx.theme();
+    let sig = help.active_signature();
+    let label = sig.label.clone();
+    let mut highlights = Vec::new();
+    if let Some(range) = sig.params.get(help.active_param) {
+        highlights.push((
+            range.clone(),
+            HighlightStyle {
+                color: Some(theme.foreground),
+                font_weight: Some(FontWeight::BOLD),
+                ..Default::default()
+            },
+        ));
+    }
+    let count = help.signatures.len();
+    h_flex()
+        .id("signature-help")
+        .test_support()
+        .flex_none()
+        .gap(tokens::space(2.0))
+        .px(tokens::space(3.0))
+        .py(tokens::space(1.0))
+        .border_t(tokens::BORDER)
+        .border_color(theme.border)
+        .bg(theme.background)
+        .text_size(tokens::text_sm())
+        .font_family(theme.mono_font_family.clone())
+        .text_color(theme.muted_foreground)
+        .child(StyledText::new(label).with_highlights(highlights))
+        .when(count > 1, |row| {
+            row.child(
+                div()
+                    .font_family(theme.font_family.clone())
+                    .child(format!("{} of {count}", help.active + 1)),
+            )
+        })
 }
 
 #[cfg(test)]

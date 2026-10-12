@@ -3,6 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod support;
+
 use std::sync::LazyLock;
 
 use gpui_kit::component::dock::DockPlacement;
@@ -394,7 +396,7 @@ fn scenario_settings_reset_general_settings(cx: &mut TestAppContext) {
     );
     // Nothing changes before confirming.
     cx.update(|_, cx| assert_eq!(AppSettings::general(cx).ui_font_size, 18.0));
-    cx.update(|window, cx| window.click("ok", cx));
+    support::click_settled(&mut cx, "ok");
     cx.run_until_parked();
     cx.update(|_, cx| assert_eq!(*AppSettings::general(cx), GeneralSettings::default()));
 }

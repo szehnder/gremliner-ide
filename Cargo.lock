@@ -3335,6 +3335,7 @@ dependencies = [
  "cc",
  "criterion",
  "insta",
+ "schema",
  "serde",
  "toml 0.9.12+spec-1.1.0",
  "tree-sitter",
@@ -8071,6 +8072,8 @@ dependencies = [
  "gremlin-syntax",
  "log",
  "lsp-types",
+ "schema",
+ "serde_json",
  "ui-theme",
 ]
 

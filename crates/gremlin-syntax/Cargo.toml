@@ -6,13 +6,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 build = "build.rs"
-include = ["src/**", "grammar/src/**", "grammar/queries/**", "steps.toml", "build.rs"]
+include = ["src/**", "grammar/src/**", "grammar/queries/**", "steps.toml", "snippets.toml", "build.rs"]
 
 [dependencies]
 tree-sitter.workspace = true
 tree-sitter-language.workspace = true
 serde.workspace = true
 toml.workspace = true
+schema.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
@@ -23,6 +24,10 @@ cc.workspace = true
 
 [[bench]]
 name = "incremental"
+harness = false
+
+[[bench]]
+name = "completion"
 harness = false
 
 [lints]

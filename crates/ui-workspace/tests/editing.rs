@@ -4,6 +4,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod support;
+
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
@@ -640,7 +642,7 @@ fn scenario_graph_editing_production_confirmation(cx: &mut TestAppContext) {
     );
     std::thread::sleep(Duration::from_millis(200));
     assert_eq!(age_on_server(&tag), 29, "not run yet");
-    env.cx.update(|window, cx| window.click("ok", cx));
+    support::click_settled(&mut env.cx, "ok");
     wait_edit(&mut env, &g);
     assert_eq!(age_on_server(&tag), 31);
 }

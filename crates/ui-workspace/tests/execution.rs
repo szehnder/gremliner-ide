@@ -3,6 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod support;
+
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
@@ -359,7 +361,7 @@ fn read_only_connection_asks_before_running_a_mutation(cx: &mut TestAppContext) 
         "blocked with an explanation"
     );
     assert!(latest(&mut env).is_none(), "nothing was sent");
-    env.cx.update(|window, cx| window.click("ok", cx));
+    support::click_settled(&mut env.cx, "ok");
     let result = wait_done(&mut env, Duration::from_secs(10));
     let (status, _, _) = status_of(&mut env, &result);
     assert_eq!(status, RunStatus::Succeeded, "Run anyway ran it once");

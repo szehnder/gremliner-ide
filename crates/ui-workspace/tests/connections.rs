@@ -3,6 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod support;
+
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
@@ -152,7 +154,7 @@ async fn scenario_connections_create_a_connection(cx: &mut TestAppContext) {
     set(&form, |f| &f.name, "Local", &mut cx);
     set(&form, |f| &f.host, "localhost", &mut cx);
     set(&form, |f| &f.port, "8182", &mut cx);
-    cx.update(|window, cx| window.click("conn-save", cx));
+    support::click_settled(&mut cx, "conn-save");
     wait_until(&mut cx, |cx| {
         !cx.update(|window, cx| window.has_active_dialog(cx))
     })
@@ -172,7 +174,7 @@ async fn scenario_connections_duplicate_name_rejected(cx: &mut TestAppContext) {
     save_direct("Local", 8182, Environment::Local, &mut cx);
     let form = open_form(None, &mut cx);
     set(&form, |f| &f.name, "local", &mut cx);
-    cx.update(|window, cx| window.click("conn-save", cx));
+    support::click_settled(&mut cx, "conn-save");
     // The store answers from the I/O runtime (a real thread): wait for it.
     let f = form.clone();
     wait_until(&mut cx, move |cx| {
@@ -291,7 +293,7 @@ async fn scenario_connections_delete_requires_confirmation(cx: &mut TestAppConte
         "asks first"
     );
     assert_eq!(names(&mut cx), ["Local"], "nothing deleted yet");
-    cx.update(|window, cx| window.click("ok", cx));
+    support::click_settled(&mut cx, "ok");
     wait_until(&mut cx, |cx| names(cx).is_empty()).await;
     assert_eq!(
         env.secrets.get(&config.password_account()).unwrap(),

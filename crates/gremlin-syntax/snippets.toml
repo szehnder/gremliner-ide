@@ -1,0 +1,41 @@
+# Completion snippets. `body` is inserted as typed; `|` marks where the cursor goes and is removed.
+
+[[snippet]]
+trigger = "repeat-until"
+description = "Loop until a condition holds, emitting the path"
+body = "repeat(out(|)).until(has('code', 'AUS')).path()"
+
+[[snippet]]
+trigger = "repeat-times"
+description = "Loop a fixed number of times"
+body = "repeat(out(|)).times(2)"
+
+[[snippet]]
+trigger = "project-by"
+description = "Project each element into a map of named values"
+body = "project('|', 'b').by('name').by(out().count())"
+
+[[snippet]]
+trigger = "group-by-count"
+description = "Count elements per value of a key"
+body = "groupCount().by('|')"
+
+[[snippet]]
+trigger = "group-by"
+description = "Group elements by a key, collecting values"
+body = "group().by('|').by(values('name').fold())"
+
+[[snippet]]
+trigger = "path-by"
+description = "Paths with a readable value per step"
+body = "path().by('|')"
+
+[[snippet]]
+trigger = "order-by-desc"
+description = "Sort by a key, largest first"
+body = "order().by('|', desc)"
+
+[[snippet]]
+trigger = "fold-coalesce-upsert"
+description = "Get or create a vertex (pre-mergeV upsert)"
+body = "V().has('person', 'name', '|').fold().coalesce(unfold(), addV('person').property('name', ''))"

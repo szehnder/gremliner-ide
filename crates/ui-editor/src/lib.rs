@@ -3,6 +3,7 @@
 
 pub mod actions;
 pub mod comment;
+pub mod completion;
 pub mod editor;
 pub mod hover;
 pub mod language;
