@@ -20,6 +20,7 @@ pub fn bind_default_keys(cx: &mut App) {
         KeyBinding::new("secondary-b", ToggleSidebar, None),
         KeyBinding::new("secondary-j", ToggleResultsDock, None),
         KeyBinding::new("secondary-alt-b", ToggleRightPanel, None),
+        KeyBinding::new("secondary-shift-a", ToggleAssistant, None),
         KeyBinding::new("secondary-+", ZoomIn, None),
         KeyBinding::new("secondary-=", ZoomIn, None),
         KeyBinding::new("secondary--", ZoomOut, None),

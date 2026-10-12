@@ -205,6 +205,11 @@ impl Tokens {
     pub fn statement_highlight(cx: &App) -> Hsla {
         cx.theme().primary.opacity(0.07)
     }
+
+    /// Steps an assistant explanation points at.
+    pub fn hint_highlight(cx: &App) -> Hsla {
+        cx.theme().warning.opacity(0.25)
+    }
 }
 
 #[cfg(test)]

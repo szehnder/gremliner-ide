@@ -2,6 +2,7 @@
 //! (ADR-0021), answer parsing, static validation, read-only dry runs (ADR-0020) and the repair loop.
 
 pub mod answer;
+pub mod chat;
 pub mod check;
 pub mod context;
 pub mod dryrun;

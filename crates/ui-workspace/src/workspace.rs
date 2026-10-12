@@ -18,8 +18,9 @@ use crate::actions::*;
 use crate::connections::ConnectionManager;
 use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
 use crate::panels::{
-    ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, InspectorPanel, ResultsPanel,
-    SchemaGraphPanel, SettingsPanel, WelcomePanel, WorkspacePanel, confirm_reset_general,
+    AssistantPanel, ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, InspectorPanel,
+    ResultsPanel, SchemaGraphPanel, SettingsPanel, WelcomePanel, WorkspacePanel,
+    confirm_reset_general,
 };
 use crate::perf_hud::PerfHud;
 use crate::persist::{self, LAYOUT_VERSION, LayoutProblem, WindowGeometry};
@@ -164,6 +165,7 @@ impl Workspace {
         let connections = ConnectionsPanel::build(window, cx);
         let results = ResultsPanel::build(window, cx);
         let inspector = InspectorPanel::build(window, cx);
+        let assistant = AssistantPanel::build(window, cx);
         dock.update(cx, |dock, cx| {
             dock.set_center(
                 DockLayout::tabs().panel_view(panel_handle(welcome), cx),
@@ -195,7 +197,63 @@ impl Workspace {
                 );
                 dock.set_dock_size(placement, size, window, cx);
             }
+            // The assistant shares the right dock, behind the inspector.
+            dock.add_panel_view(
+                panel_handle(assistant),
+                DockPlacement::Right,
+                None,
+                window,
+                cx,
+            );
+            if let Some(id) = dock
+                .layout(DockPlacement::Right)
+                .and_then(|t| t.panels().next())
+            {
+                dock.select_panel(id, window, cx);
+            }
         });
+    }
+
+    /// Show the assistant panel (adding it to the right dock if a saved layout lacks it), or hide the
+    /// right dock when the assistant is already showing.
+    pub fn toggle_assistant(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Option<Entity<AssistantPanel>> {
+        let found = [
+            DockPlacement::Right,
+            DockPlacement::Left,
+            DockPlacement::Bottom,
+            DockPlacement::Center,
+        ]
+        .into_iter()
+        .find_map(|placement| {
+            let dock = self.dock.read(cx);
+            dock.layout(placement)?.panels().find_map(|id| {
+                let view = dock.panel(id)?.view().downcast::<AssistantPanel>().ok()?;
+                Some((id, view))
+            })
+        });
+        let (id, view) = match found {
+            Some(f) => f,
+            None => {
+                let panel = AssistantPanel::build(window, cx);
+                let handle = panel_handle(panel.clone());
+                let id = handle.panel_id(cx);
+                self.dock.update(cx, |dock, cx| {
+                    dock.add_panel_view(handle, DockPlacement::Right, None, window, cx);
+                });
+                (id, panel)
+            }
+        };
+        self.dock.update(cx, |dock, cx| {
+            if !dock.is_dock_open(DockPlacement::Right) {
+                dock.toggle_dock(DockPlacement::Right, window, cx);
+            }
+            dock.select_panel(id, window, cx);
+        });
+        Some(view)
     }
 
     /// Keep the sidebar within its designed range; the dock itself only enforces a global minimum.
@@ -618,6 +676,9 @@ impl Render for Workspace {
                 this.new_tab(window, cx);
             }))
             .on_action(cx.listener(|this, _: &SplitRight, window, cx| this.split_right(window, cx)))
+            .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
+                this.toggle_assistant(window, cx);
+            }))
             .on_action(cx.listener(|this, a: &OpenSchemaGraph, window, cx| {
                 this.open_schema_graph(a.connection, window, cx);
             }))

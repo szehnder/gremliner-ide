@@ -56,11 +56,45 @@ impl Generator for ScriptedLlm {
         let n = requests.len();
         requests.push(req.clone());
         let reply = self.replies[n.min(self.replies.len() - 1)].clone();
+        Box::pin(async move { reply.map(|text| to_response(&text)) })
+    }
+}
+
+/// `@tool {"name": …, "args": {…}}` lines become tool calls; everything else is text.
+fn to_response(text: &str) -> ChatResponse {
+    let mut out = ChatResponse::default();
+    let mut body = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        if let Some(json) = line.strip_prefix("@tool ")
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(json)
+        {
+            out.tool_calls.push((
+                format!("call_{i}"),
+                v["name"].as_str().unwrap_or_default().to_owned(),
+                v["args"].to_string(),
+            ));
+        } else {
+            body.push(line);
+        }
+    }
+    out.text = body.join("\n");
+    out
+}
+
+impl crate::chat::StreamingGenerator for ScriptedLlm {
+    fn generate_streaming<'a>(
+        &'a self,
+        req: &'a ChatRequest,
+        on_text: &'a (dyn Fn(&str) + Send + Sync),
+    ) -> BoxFuture<'a, Result<ChatResponse, LlmError>> {
         Box::pin(async move {
-            reply.map(|text| ChatResponse {
-                text,
-                ..ChatResponse::default()
-            })
+            let resp = self.generate(req).await?;
+            // In pieces, like a real stream.
+            let chars: Vec<char> = resp.text.chars().collect();
+            for chunk in chars.chunks(chars.len().div_ceil(3).max(1)) {
+                on_text(&chunk.iter().collect::<String>());
+            }
+            Ok(resp)
         })
     }
 }

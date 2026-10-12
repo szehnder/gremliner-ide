@@ -12,6 +12,7 @@ actions!(
         ToggleSidebar,
         ToggleResultsDock,
         ToggleRightPanel,
+        ToggleAssistant,
         ResetLayout,
         ZoomIn,
         ZoomOut,

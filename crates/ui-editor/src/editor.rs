@@ -52,6 +52,9 @@ pub struct QueryEditor {
     diagnostics: Vec<Diagnostic>,
     statement_highlight: RangeDecorationCollection,
     error_highlight: RangeDecorationCollection,
+    /// Steps an explanation item points at (assistant hover).
+    hint_highlight: RangeDecorationCollection,
+    hint_ranges: Vec<Range<usize>>,
     highlighted: Option<Range<usize>>,
     last_cursor: usize,
     /// Schema, schema warnings and recent completions, shared with the completion and fix providers.
@@ -88,6 +91,9 @@ impl QueryEditor {
         let error_highlight = state.update(cx, |s, cx| {
             s.create_range_decorations_collection(Vec::new(), cx)
         });
+        let hint_highlight = state.update(cx, |s, cx| {
+            s.create_range_decorations_collection(Vec::new(), cx)
+        });
         let subscriptions = vec![
             cx.subscribe_in(&state, window, |this, _, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -107,6 +113,8 @@ impl QueryEditor {
             diagnostics: Vec::new(),
             statement_highlight,
             error_highlight,
+            hint_highlight,
+            hint_ranges: Vec::new(),
             highlighted: None,
             last_cursor: usize::MAX,
             shared,
@@ -487,6 +495,27 @@ impl QueryEditor {
             })
             .unwrap_or_default();
         self.error_highlight.set(decorations, cx);
+    }
+
+    /// Highlight `ranges` (e.g. the steps an explanation item covers); empty clears.
+    pub fn set_hint_ranges(&mut self, ranges: Vec<Range<usize>>, cx: &mut Context<'_, Self>) {
+        let len = self.latest_text.len();
+        let ranges: Vec<Range<usize>> = ranges.into_iter().filter(|r| r.end <= len).collect();
+        let decorations = ranges
+            .iter()
+            .map(|r| {
+                RangeDecoration::new(r.clone())
+                    .with_style(RangeDecorationStyle::Fill)
+                    .with_color(tokens::hint_highlight(cx))
+            })
+            .collect();
+        self.hint_highlight.set(decorations, cx);
+        self.hint_ranges = ranges;
+        cx.notify();
+    }
+
+    pub fn hint_ranges(&self) -> &[Range<usize>] {
+        &self.hint_ranges
     }
 
     /// Move the cursor to a diagnostic (problems list click).

@@ -26,3 +26,7 @@ pub fn error(cx: &App) -> Hsla {
 pub fn statement_highlight(cx: &App) -> Hsla {
     Tokens::statement_highlight(cx)
 }
+
+pub fn hint_highlight(cx: &App) -> Hsla {
+    Tokens::hint_highlight(cx)
+}

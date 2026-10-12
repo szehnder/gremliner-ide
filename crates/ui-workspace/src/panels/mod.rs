@@ -3,6 +3,7 @@
 //! A panel implements gpui-kit's two dock traits plus [`WorkspacePanel`]. [`register`] makes it
 //! restorable from a saved layout by its [`WorkspacePanel::NAME`]; never rename a shipped name.
 
+mod assistant;
 mod connections;
 mod editor_tab;
 mod empty;
@@ -15,6 +16,7 @@ mod welcome;
 use gpui_kit::component::dock::{DockPlacement, Panel, panel_handle, register_panel};
 use gpui_kit::*;
 
+pub use assistant::AssistantPanel;
 pub use connections::ConnectionsPanel;
 pub use editor_tab::{EditorPanel, EditorTabs, EditorTabsEvent, RunRequest};
 pub use empty::empty_state;
@@ -47,6 +49,7 @@ pub fn register_builtin(cx: &mut App) {
     register::<WelcomePanel>(cx);
     register::<ResultsPanel>(cx);
     register::<InspectorPanel>(cx);
+    register::<AssistantPanel>(cx);
     register::<SettingsPanel>(cx);
     editor_tab::register(cx);
     schema_graph::register(cx);

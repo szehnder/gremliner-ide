@@ -43,6 +43,8 @@ pub enum EditorTabsEvent {
     RunRequested(RunRequest),
     /// A tab opened or closed.
     TabsChanged,
+    /// Another tab became active.
+    ActiveChanged,
 }
 
 /// Registry of open editor tabs.
@@ -51,6 +53,8 @@ pub struct EditorTabs {
     tabs: Vec<WeakEntity<EditorPanel>>,
     next_number: usize,
     last_run: Option<RunRequest>,
+    /// The tab most recently shown or focused (the assistant follows it).
+    active: Option<Uuid>,
 }
 
 impl EventEmitter<EditorTabsEvent> for EditorTabs {}
@@ -85,6 +89,22 @@ impl EditorTabs {
         self.last_run.as_ref()
     }
 
+    /// The active tab: the one last shown or focused, else the newest.
+    pub fn active(&self, cx: &App) -> Option<Entity<EditorPanel>> {
+        let tabs = self.tabs();
+        self.active
+            .and_then(|id| tabs.iter().find(|t| t.read(cx).id == id).cloned())
+            .or_else(|| tabs.last().cloned())
+    }
+
+    pub fn set_active(&mut self, id: Uuid, cx: &mut Context<'_, Self>) {
+        if self.active != Some(id) {
+            self.active = Some(id);
+            cx.emit(EditorTabsEvent::ActiveChanged);
+            cx.notify();
+        }
+    }
+
     fn add(&mut self, tab: &Entity<EditorPanel>, cx: &mut Context<'_, Self>) {
         // Restored "Query N" tabs push numbering past N, so new tabs never repeat a name.
         if let Some(n) = tab
@@ -97,6 +117,7 @@ impl EditorTabs {
         }
         self.tabs.retain(|t| t.upgrade().is_some());
         self.tabs.push(tab.downgrade());
+        self.active = Some(tab.read(cx).id);
         cx.emit(EditorTabsEvent::TabsChanged);
         cx.notify();
     }
@@ -375,6 +396,13 @@ impl BasePanel for EditorPanel {
         Self::NAME
     }
 
+    fn set_active(&mut self, active: bool, _: &mut Window, cx: &mut Context<'_, Self>) {
+        if active {
+            let id = self.id;
+            EditorTabs::global(cx).update(cx, |t, cx| t.set_active(id, cx));
+        }
+    }
+
     fn dump(&self, _: &App) -> PanelState {
         let mut state = PanelState::new(Self::NAME);
         state.info = PanelInfo::panel(serde_json::json!({ "tab": self.id.to_string() }));
@@ -631,6 +659,24 @@ impl EditorPanel {
                 s.set_cursor_position(pos, window, cx);
             });
         });
+    }
+
+    /// Run a suggested query: insert it, then run it; queries that write ask first.
+    pub fn run_suggestion(
+        &mut self,
+        query: &str,
+        writes: bool,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.on_prompt_event(
+            PromptBarEvent::Run {
+                query: query.to_owned(),
+                writes,
+            },
+            window,
+            cx,
+        );
     }
 
     fn insert_and_run(&mut self, query: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
