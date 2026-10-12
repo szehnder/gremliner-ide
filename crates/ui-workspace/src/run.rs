@@ -14,6 +14,7 @@ use gpui_kit::*;
 use gremlin_client::{Error as ClientError, Request};
 use gremlin_model::GValue;
 use providers::read_only;
+use ui_results::graph_view::LayoutSettings;
 use ui_results::{
     FetchRequest, GraphView, GraphViewEvent, ResultSet, RunError, RunStatus, error_range,
 };
@@ -104,12 +105,39 @@ impl Runner {
             return;
         }
         let graph = cx.new(|cx| GraphView::new(window, cx));
+        // The tab's saved layout choice (applied without running; the next result lays out with it).
+        if let Some(storage) = AppSettings::storage(cx) {
+            let read =
+                storage.get_json::<serde_json::Value>(storage::Table::UiState, &layout_key(tab));
+            let graph = graph.downgrade();
+            cx.spawn(async move |_, cx| {
+                if let Ok(Some(saved)) = read.await {
+                    let settings = LayoutSettings::from_json(&saved);
+                    let _ = graph.update(cx, |g, cx| g.set_layout_settings(settings, false, cx));
+                }
+            })
+            .detach();
+        }
         self._graph_subscriptions.push(cx.subscribe(
             &graph,
-            move |this, graph, event: &GraphViewEvent, cx| {
-                if let GraphViewEvent::Fetch(request) = event {
-                    this.fetch(tab, graph, request.clone(), cx);
+            move |this, graph, event: &GraphViewEvent, cx| match event {
+                GraphViewEvent::Fetch(request) => this.fetch(tab, graph, request.clone(), cx),
+                GraphViewEvent::LayoutChanged(settings) => {
+                    if let Some(storage) = AppSettings::storage(cx) {
+                        let write = storage.set_json(
+                            storage::Table::UiState,
+                            &layout_key(tab),
+                            &settings.to_json(),
+                        );
+                        cx.background_spawn(async move {
+                            if let Err(err) = write.await {
+                                log::warn!("failed to save the graph layout: {err}");
+                            }
+                        })
+                        .detach();
+                    }
                 }
+                GraphViewEvent::ShowInTable(_) => {}
             },
         ));
         self.graphs.insert(tab, graph);
@@ -407,6 +435,11 @@ async fn stream(
             },
         }
     }
+}
+
+/// `ui_state` key of a tab's graph layout settings.
+pub fn layout_key(tab: Uuid) -> String {
+    format!("graph.layout.{tab}")
 }
 
 /// Run `script` to completion (up to `limit` items) and return the items.

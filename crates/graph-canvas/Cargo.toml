@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 graph-store.workspace = true
+graph-layout.workspace = true
 gpui-kit.workspace = true
 futures.workspace = true
 rayon.workspace = true

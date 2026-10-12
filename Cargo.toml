@@ -101,6 +101,9 @@ too_many_arguments = "allow"
 opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
+# Layout iterations are hot numeric loops; keep them fast in dev builds and tests too.
+[profile.dev.package.graph-layout]
+opt-level = 3
 
 [profile.release]
 lto = "thin"

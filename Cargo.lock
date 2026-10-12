@@ -3267,6 +3267,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "gpui-kit",
+ "graph-layout",
  "graph-store",
  "image",
  "rayon",
@@ -3275,6 +3276,10 @@ dependencies = [
 [[package]]
 name = "graph-layout"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+ "rayon",
+]
 
 [[package]]
 name = "graph-store"
@@ -8068,6 +8073,7 @@ version = "0.1.0"
 dependencies = [
  "gpui-kit",
  "graph-canvas",
+ "graph-layout",
  "graph-store",
  "gremlin-model",
  "gremlin-syntax",
@@ -8094,6 +8100,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "gpui-kit",
+ "graph-layout",
  "graph-store",
  "gremlin-client",
  "gremlin-model",

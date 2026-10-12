@@ -82,3 +82,107 @@ fn shift_click_extends_selection_and_empty_click_clears(cx: &mut TestAppContext)
     cx.simulate_mouse_up(empty, MouseButton::Left, Modifiers::none());
     view.read_with(cx, |v, _| assert_eq!(v.store().selected().count(), 0));
 }
+
+fn render_ms(cx: &mut gpui_kit::VisualTestContext) -> f32 {
+    use gpui_kit::test::TestWindowExt as _;
+    let t = std::time::Instant::now();
+    cx.update(|window, cx| window.render_frame(cx));
+    t.elapsed().as_secs_f32() * 1000.0
+}
+
+#[gpui_kit::test]
+fn scenario_graph_layouts_interaction_during_layout(cx: &mut TestAppContext) {
+    use graph_canvas::LayoutScope;
+    use graph_layout::{LayoutKind, LayoutOptions};
+    cx.executor().allow_parking();
+    let store = graph_store::synth::generate(10_000, 20_000, 8, 1);
+    let (view, cx) = cx.add_window_view(|_, cx| GraphCanvas::new(store, cx));
+    cx.simulate_resize(gpui_kit::size(px(1400.0), px(900.0)));
+    cx.run_until_parked();
+    render_ms(cx);
+    let before = view.read_with(cx, |v, _| v.store().positions().to_vec());
+    view.update(cx, |v, cx| {
+        v.run_layout(
+            LayoutKind::ForceAtlas2,
+            LayoutOptions::default(),
+            LayoutScope::All,
+            false,
+            cx,
+        )
+    });
+    let centre = point(px(700.0), px(450.0));
+    let mut frames = Vec::new();
+    let started = std::time::Instant::now();
+    let mut k = 0;
+    while started.elapsed() < std::time::Duration::from_millis(1500) {
+        // Alternate zooming and panning while the layout streams frames.
+        if k % 2 == 0 {
+            cx.simulate_event(gpui_kit::ScrollWheelEvent {
+                position: centre,
+                delta: gpui_kit::ScrollDelta::Pixels(point(
+                    px(0.0),
+                    px(if k % 4 == 0 { 30.0 } else { -30.0 }),
+                )),
+                modifiers: Modifiers::none(),
+                touch_phase: gpui_kit::TouchPhase::Moved,
+            });
+        } else {
+            let to = point(centre.x + px(3.0), centre.y);
+            cx.simulate_mouse_down(centre, MouseButton::Left, Modifiers::none());
+            cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
+            cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
+        }
+        k += 1;
+        frames.push(render_ms(cx));
+        std::thread::sleep(std::time::Duration::from_millis(4));
+    }
+    let after = view.read_with(cx, |v, _| v.store().positions().to_vec());
+    assert_ne!(
+        before, after,
+        "layout frames were applied during interaction"
+    );
+    frames.sort_by(f32::total_cmp);
+    let p95 = frames[(frames.len() - 1) * 95 / 100];
+    eprintln!(
+        "{} frames during layout: p50 {:.2} ms, p95 {p95:.2} ms",
+        frames.len(),
+        frames[frames.len() / 2]
+    );
+    assert!(
+        p95 < 1000.0 / 60.0,
+        "frame p95 {p95:.2} ms (60 fps needs < 16.7 ms)"
+    );
+}
+
+#[gpui_kit::test]
+fn stopping_the_layout_freezes_nodes_within_a_frame(cx: &mut TestAppContext) {
+    use graph_canvas::LayoutScope;
+    use graph_layout::{LayoutKind, LayoutOptions};
+    cx.executor().allow_parking();
+    let store = graph_store::synth::generate(3_000, 6_000, 4, 2);
+    let (view, cx) = cx.add_window_view(|_, cx| GraphCanvas::new(store, cx));
+    cx.run_until_parked();
+    view.update(cx, |v, cx| {
+        v.run_layout(
+            LayoutKind::ForceAtlas2,
+            LayoutOptions::default(),
+            LayoutScope::All,
+            false,
+            cx,
+        )
+    });
+    for _ in 0..5 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        render_ms(cx);
+    }
+    view.update(cx, |v, cx| v.stop_layout(cx));
+    render_ms(cx);
+    let frozen = view.read_with(cx, |v, _| v.store().positions().to_vec());
+    for _ in 0..5 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        render_ms(cx);
+    }
+    let later = view.read_with(cx, |v, _| v.store().positions().to_vec());
+    assert_eq!(frozen, later, "no movement after Stop");
+    assert!(view.read_with(cx, |v, _| !v.is_layout_running()));
+}

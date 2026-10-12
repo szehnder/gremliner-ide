@@ -10,17 +10,18 @@ use std::collections::{HashMap, HashSet};
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use graph_canvas::theme::CanvasStyle;
-use graph_canvas::{CanvasEvent, GraphCanvas};
+use graph_canvas::{CanvasEvent, GraphCanvas, LayoutScope};
+use graph_layout::{LayoutKind, LayoutOptions};
 use graph_store::visibility::LabelCount;
 use graph_store::{
-    EdgeIn, ExtId, Filter, FilterOp, GraphDelta, GraphStore, NodeIn, NodeIx, PropValue, Props,
-    flags,
+    EdgeIn, ExtId, Filter, FilterOp, GraphDelta, GraphStore, MergeReport, NodeIn, NodeIx,
+    PropValue, Props, flags,
 };
 use gremlin_model::elements::{ElementSet, elements};
 use gremlin_model::{GValue, console};
@@ -39,8 +40,100 @@ actions!(
         FitGraph,
         FindInGraph,
         ClearGraph,
+        RerunLayout,
+        StopLayout,
     ]
 );
+
+/// Node spacing preset (applies to every layout).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Spacing {
+    Compact,
+    Normal,
+    Wide,
+}
+
+/// How strongly the force layout pulls everything to the centre.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Gravity {
+    Weak,
+    Normal,
+    Strong,
+}
+
+/// The tab's layout choice and options (persisted per tab by the host).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LayoutSettings {
+    pub kind: LayoutKind,
+    pub spacing: Spacing,
+    pub gravity: Gravity,
+}
+
+impl Default for LayoutSettings {
+    fn default() -> Self {
+        Self {
+            kind: LayoutKind::ForceAtlas2,
+            spacing: Spacing::Normal,
+            gravity: Gravity::Normal,
+        }
+    }
+}
+
+impl LayoutSettings {
+    pub fn options(&self) -> LayoutOptions {
+        let mut o = LayoutOptions::default();
+        let k = match self.spacing {
+            Spacing::Compact => 0.5,
+            Spacing::Normal => 1.0,
+            Spacing::Wide => 2.0,
+        };
+        o.fa2.scaling *= k * k;
+        o.hierarchical.layer_gap *= k;
+        o.hierarchical.node_gap *= k;
+        o.spacing *= k;
+        o.fa2.gravity = match self.gravity {
+            Gravity::Weak => 0.03,
+            Gravity::Normal => 0.1,
+            Gravity::Strong => 0.3,
+        };
+        o
+    }
+
+    pub fn to_json(self) -> serde_json::Value {
+        let spacing = match self.spacing {
+            Spacing::Compact => "compact",
+            Spacing::Normal => "normal",
+            Spacing::Wide => "wide",
+        };
+        let gravity = match self.gravity {
+            Gravity::Weak => "weak",
+            Gravity::Normal => "normal",
+            Gravity::Strong => "strong",
+        };
+        serde_json::json!({ "kind": self.kind.id(), "spacing": spacing, "gravity": gravity })
+    }
+
+    /// Parses [`Self::to_json`] output; unknown or missing fields keep their defaults.
+    pub fn from_json(v: &serde_json::Value) -> Self {
+        let d = Self::default();
+        let field = |k: &str| v.get(k).and_then(serde_json::Value::as_str);
+        Self {
+            kind: field("kind")
+                .and_then(LayoutKind::from_id)
+                .unwrap_or(d.kind),
+            spacing: match field("spacing") {
+                Some("compact") => Spacing::Compact,
+                Some("wide") => Spacing::Wide,
+                _ => d.spacing,
+            },
+            gravity: match field("gravity") {
+                Some("weak") => Gravity::Weak,
+                Some("strong") => Gravity::Strong,
+                _ => d.gravity,
+            },
+        }
+    }
+}
 
 /// Key context of the canvas area (bindings such as Delete apply only there, not in the search box).
 pub const CANVAS_CONTEXT: &str = "GraphCanvas";
@@ -98,6 +191,8 @@ pub enum GraphViewEvent {
     Fetch(FetchRequest),
     /// "Show in table": switch to the Table view filtered to this id.
     ShowInTable(String),
+    /// The layout choice or options changed (persist them for the tab).
+    LayoutChanged(LayoutSettings),
 }
 
 /// Counts for the status text.
@@ -125,6 +220,8 @@ impl GraphStats {
 
 struct RunState {
     run_id: u64,
+    /// The run adds to an existing graph: new nodes are placed incrementally.
+    incremental: bool,
     ingested: usize,
     has_vertices: bool,
     has_edges: bool,
@@ -152,6 +249,7 @@ pub struct GraphView {
     filter_op: FilterOp,
     show_filter: bool,
     show_legend: bool,
+    layout: LayoutSettings,
     accumulate: bool,
     edges_between: bool,
     expand_cap: usize,
@@ -237,6 +335,7 @@ impl GraphView {
             filter_op: FilterOp::Gt,
             show_filter: false,
             show_legend: true,
+            layout: LayoutSettings::default(),
             accumulate: false,
             edges_between: true,
             expand_cap: DEFAULT_EXPAND_CAP,
@@ -377,8 +476,10 @@ impl GraphView {
             } else if self.store(cx).node_count() == 0 {
                 self.auto_fit = true;
             }
+            let incremental = self.store(cx).node_count() > 0;
             self.run = Some(RunState {
                 run_id,
+                incremental,
                 ingested: 0,
                 has_vertices: false,
                 has_edges: false,
@@ -391,7 +492,13 @@ impl GraphView {
             run.has_vertices |= !set.vertices.is_empty();
             run.has_edges |= !set.edges.is_empty();
             run.ingested = items.len();
-            self.merge_set(set, cx);
+            let incremental = run.incremental;
+            let report = self.merge_set(set, cx);
+            if incremental {
+                self.place_new(&report, cx);
+            } else if !report.added_nodes.is_empty() || !report.added_edges.is_empty() {
+                self.relayout(LayoutScope::All, cx);
+            }
         }
         if finished
             && let Some(run) = self.run.as_mut()
@@ -403,12 +510,12 @@ impl GraphView {
         }
     }
 
-    fn merge_set(&mut self, set: ElementSet, cx: &mut Context<'_, Self>) {
+    fn merge_set(&mut self, set: ElementSet, cx: &mut Context<'_, Self>) -> MergeReport {
         if set.is_empty() {
-            return;
+            return MergeReport::default();
         }
         let delta = self.delta_for(set);
-        self.update_store(cx, |g| g.merge(delta));
+        let report = self.update_store(cx, |g| g.merge(delta));
         if self.auto_fit {
             let touched = self.canvas.read(cx).camera_touched();
             if touched {
@@ -416,6 +523,64 @@ impl GraphView {
             } else {
                 self.canvas.update(cx, |c, _| c.request_fit());
             }
+        }
+        report
+    }
+
+    // ---- layout ------------------------------------------------------------------------------
+
+    pub fn layout_settings(&self) -> LayoutSettings {
+        self.layout
+    }
+
+    /// Change the layout choice; `run` applies it to the graph now.
+    pub fn set_layout_settings(
+        &mut self,
+        settings: LayoutSettings,
+        run: bool,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let changed = settings != self.layout;
+        self.layout = settings;
+        if changed {
+            cx.emit(GraphViewEvent::LayoutChanged(settings));
+        }
+        if run {
+            self.rerun_layout(cx);
+        }
+        cx.notify();
+    }
+
+    /// Lay out the whole graph again with the current settings.
+    pub fn rerun_layout(&mut self, cx: &mut Context<'_, Self>) {
+        let fit = !self.canvas.read(cx).camera_touched() || self.auto_fit;
+        let (kind, options) = (self.layout.kind, self.layout.options());
+        self.canvas.update(cx, |c, cx| {
+            c.run_layout(kind, options, LayoutScope::All, fit, cx)
+        });
+        cx.notify();
+    }
+
+    pub fn stop_layout(&mut self, cx: &mut Context<'_, Self>) {
+        self.canvas.update(cx, |c, cx| c.stop_layout(cx));
+        cx.notify();
+    }
+
+    pub fn is_layout_running(&self, cx: &App) -> bool {
+        self.canvas.read(cx).is_layout_running()
+    }
+
+    fn relayout(&mut self, scope: LayoutScope, cx: &mut Context<'_, Self>) {
+        let fit = self.auto_fit && scope == LayoutScope::All;
+        let (kind, options) = (self.layout.kind, self.layout.options());
+        self.canvas
+            .update(cx, |c, cx| c.run_layout(kind, options, scope, fit, cx));
+    }
+
+    /// Settle newly added nodes around their neighbours without moving the rest.
+    fn place_new(&mut self, report: &MergeReport, cx: &mut Context<'_, Self>) {
+        if !report.added_nodes.is_empty() {
+            self.relayout(LayoutScope::Only(report.added_nodes.clone()), cx);
         }
     }
 
@@ -622,9 +787,19 @@ impl GraphView {
             }
         };
         match &request.kind {
-            FetchKind::Endpoints => self.merge_set(elements(&items), cx),
+            FetchKind::Endpoints => {
+                let report = self.merge_set(elements(&items), cx);
+                self.place_new(&report, cx);
+            }
             FetchKind::EdgesBetween => {
-                self.merge_set(elements(&items), cx);
+                let report = self.merge_set(elements(&items), cx);
+                let incremental = self.run.as_ref().is_some_and(|r| r.incremental);
+                if !report.added_edges.is_empty() && self.auto_fit && !incremental {
+                    // Still settling the first picture: lay it out again with the new edges.
+                    self.relayout(LayoutScope::All, cx);
+                } else {
+                    self.place_new(&report, cx);
+                }
                 self.fetch_details(cx);
             }
             FetchKind::Expand {
@@ -637,7 +812,8 @@ impl GraphView {
                 let more = items.len() > cap;
                 // Expanding keeps the picture: no auto-fit from here on.
                 self.auto_fit = false;
-                self.merge_set(elements(&items[..items.len().min(cap)]), cx);
+                let report = self.merge_set(elements(&items[..items.len().min(cap)]), cx);
+                self.place_new(&report, cx);
                 self.fetch_details(cx);
                 if more {
                     let caption = self
@@ -837,6 +1013,7 @@ impl GraphView {
                 .when(!on, |b| b.ghost())
         };
         let minimap = self.canvas.read(cx).show_minimap();
+        let running = self.is_layout_running(cx);
         let match_text = (!self.matches.is_empty())
             .then(|| format!("{}/{}", self.match_ix + 1, self.matches.len()));
         h_flex()
@@ -886,6 +1063,28 @@ impl GraphView {
                         })
                     })),
             )
+            .child(
+                div()
+                    .w(Tokens::BORDER)
+                    .h(Tokens::space(4.0))
+                    .bg(theme.border),
+            )
+            .child(self.render_layout_picker(cx))
+            .child(if running {
+                Button::new("graph-layout-stop")
+                    .icon(Icon::new(IconName::CircleX))
+                    .ghost()
+                    .xsmall()
+                    .tooltip("Stop layout")
+                    .on_click(cx.listener(|this, _, _, cx| this.stop_layout(cx)))
+            } else {
+                Button::new("graph-layout-run")
+                    .icon(Icon::new(IconName::Redo))
+                    .ghost()
+                    .xsmall()
+                    .tooltip("Re-run layout")
+                    .on_click(cx.listener(|this, _, _, cx| this.rerun_layout(cx)))
+            })
             .child(
                 div()
                     .w(Tokens::BORDER)
@@ -980,6 +1179,60 @@ impl GraphView {
                     .text_color(theme.muted_foreground)
                     .child(stats.text()),
             )
+    }
+
+    fn render_layout_picker(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let view = cx.weak_entity();
+        let current = self.layout;
+        Button::new("graph-layout-picker")
+            .label(format!("Layout: {}", current.kind.name()))
+            .ghost()
+            .xsmall()
+            .dropdown_menu(move |menu, _, _| {
+                let item = |label: &'static str, checked: bool, next: LayoutSettings| {
+                    let view = view.clone();
+                    PopupMenuItem::new(label)
+                        .checked(checked)
+                        .on_click(move |_, _, cx| {
+                            let _ = view.update(cx, |v, cx| v.set_layout_settings(next, true, cx));
+                        })
+                };
+                let mut menu = menu.label("Layout");
+                for kind in LayoutKind::ALL {
+                    menu = menu.item(item(
+                        kind.name(),
+                        kind == current.kind,
+                        LayoutSettings { kind, ..current },
+                    ));
+                }
+                menu = menu.separator().label("Spacing");
+                for (label, spacing) in [
+                    ("Compact", Spacing::Compact),
+                    ("Normal", Spacing::Normal),
+                    ("Wide", Spacing::Wide),
+                ] {
+                    menu = menu.item(item(
+                        label,
+                        spacing == current.spacing,
+                        LayoutSettings { spacing, ..current },
+                    ));
+                }
+                if current.kind == LayoutKind::ForceAtlas2 {
+                    menu = menu.separator().label("Gravity");
+                    for (label, gravity) in [
+                        ("Weak", Gravity::Weak),
+                        ("Normal", Gravity::Normal),
+                        ("Strong", Gravity::Strong),
+                    ] {
+                        menu = menu.item(item(
+                            label,
+                            gravity == current.gravity,
+                            LayoutSettings { gravity, ..current },
+                        ));
+                    }
+                }
+                menu
+            })
     }
 
     fn render_legend(&self, cx: &mut Context<'_, Self>) -> impl IntoElement {
@@ -1356,6 +1609,8 @@ impl Render for GraphView {
             .on_action(cx.listener(|this, _: &PinSelection, _, cx| this.set_pinned(true, cx)))
             .on_action(cx.listener(|this, _: &UnpinSelection, _, cx| this.set_pinned(false, cx)))
             .on_action(cx.listener(|this, _: &ClearGraph, _, cx| this.clear(cx)))
+            .on_action(cx.listener(|this, _: &RerunLayout, _, cx| this.rerun_layout(cx)))
+            .on_action(cx.listener(|this, _: &StopLayout, _, cx| this.stop_layout(cx)))
             .on_action(cx.listener(|this, _: &FitGraph, _, cx| {
                 this.canvas.update(cx, |c, cx| {
                     c.request_fit();

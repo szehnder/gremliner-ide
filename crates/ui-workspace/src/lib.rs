@@ -121,6 +121,10 @@ fn register_commands(cx: &mut App) {
             .when(When::GraphFocused)
             .keywords(&["search"]),
         CommandMeta::new("Graph", "Clear Graph", graph::ClearGraph).when(When::GraphFocused),
+        CommandMeta::new("Graph", "Re-run Layout", graph::RerunLayout)
+            .when(When::GraphFocused)
+            .keywords(&["layout", "arrange"]),
+        CommandMeta::new("Graph", "Stop Layout", graph::StopLayout).when(When::GraphFocused),
         CommandMeta::new("Application", "Quit", Quit).keywords(&["exit"]),
     ] {
         CommandRegistry::register(cx, meta);

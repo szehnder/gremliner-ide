@@ -3,6 +3,7 @@
 
 mod connections;
 mod lang;
+mod layout_bench;
 mod query;
 mod render_bench;
 
@@ -82,6 +83,17 @@ enum Command {
         /// The Gremlin script.
         script: String,
     },
+    /// Time a graph layout on a GraphML dataset (default: the testenv's air-routes).
+    LayoutBench {
+        /// A testenv dataset name (`air-routes`, `synthetic-10000-42`) or a GraphML path.
+        #[arg(long, default_value = "air-routes")]
+        dataset: String,
+        /// Layout id: fa2, hierarchical-td, hierarchical-lr, radial, circular, grid, concentric.
+        #[arg(long, default_value = "fa2")]
+        layout: String,
+        #[arg(long, default_value_t = 42)]
+        seed: u64,
+    },
     /// Headless CPU cost of graph frames (scene build + zoomed-out rasteriser) on a synthetic graph.
     RenderBench {
         #[arg(long, default_value_t = 10_000)]
@@ -108,6 +120,15 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Connections { cmd } => connections::run(cmd, cli.data_dir, &runtime)?,
+        Command::LayoutBench {
+            dataset,
+            layout,
+            seed,
+        } => layout_bench::run(&layout_bench::Args {
+            dataset,
+            layout,
+            seed,
+        })?,
         Command::Lint {
             file,
             deny_warnings,

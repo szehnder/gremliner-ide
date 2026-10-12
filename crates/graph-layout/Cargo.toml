@@ -7,6 +7,14 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+rayon.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "fa2"
+harness = false
 
 [lints]
 workspace = true

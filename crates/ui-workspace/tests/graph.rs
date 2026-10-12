@@ -168,12 +168,17 @@ fn run(env: &mut Env, tab: &Entity<EditorPanel>, text: &str) -> Entity<GraphView
     g
 }
 
-/// Wait (real time) for the graph's follow-up queries, then draw a frame.
+/// Wait (real time) for the graph's follow-up queries and layout, then draw a frame.
 fn settle(env: &mut Env, g: &Entity<GraphView>) {
     let started = Instant::now();
     loop {
         env.cx.run_until_parked();
-        if env.cx.update(|_, cx| g.read(cx).pending_fetches()) == 0 {
+        env.cx.update(|window, cx| window.render_frame(cx));
+        let busy = env.cx.update(|_, cx| {
+            let g = g.read(cx);
+            g.pending_fetches() > 0 || g.is_layout_running(cx)
+        });
+        if !busy {
             break;
         }
         assert!(
@@ -405,4 +410,53 @@ fn scenario_graph_view_expand_by_label(cx: &mut TestAppContext) {
     assert_eq!(edges, 98, "AUS has 98 outgoing routes");
     assert!(all_out_routes, "only outgoing route edges were added");
     assert_eq!(env.cx.update(|_, cx| g.read(cx).more_text()), None);
+}
+
+#[gpui_kit::test]
+fn layout_choice_persists_per_tab(cx: &mut TestAppContext) {
+    if !testenv_up() {
+        return;
+    }
+    let mut env = setup(cx);
+    let conn = connection(&mut env, "Modern", "gModern", false);
+    let tab = tab(&mut env, conn);
+    let g = run(&mut env, &tab, "g.V()");
+    let grid = ui_results::graph_view::LayoutSettings {
+        kind: graph_layout::LayoutKind::Grid,
+        ..Default::default()
+    };
+    env.cx
+        .update(|_, cx| g.update(cx, |g, cx| g.set_layout_settings(grid, true, cx)));
+    settle(&mut env, &g);
+    let tab_id = env.cx.update(|_, cx| tab.read(cx).id());
+    let saved = (0..200).find_map(|_| {
+        env.cx.run_until_parked();
+        let v = env.cx.update(|_, cx| {
+            ui_workspace::settings::AppSettings::storage(cx)
+                .unwrap()
+                .get_json_blocking::<serde_json::Value>(
+                    storage::Table::UiState,
+                    &ui_workspace::run::layout_key(tab_id),
+                )
+                .unwrap()
+        });
+        if v.is_none() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        v
+    });
+    let saved = saved.expect("layout saved");
+    assert_eq!(
+        ui_results::graph_view::LayoutSettings::from_json(&saved),
+        grid
+    );
+    // Grid: six nodes on a 3-column grid (two rows).
+    let rows = env.cx.update(|_, cx| {
+        let s = g.read(cx).store(cx);
+        let mut ys: Vec<i64> = s.positions().iter().map(|p| p[1].round() as i64).collect();
+        ys.sort_unstable();
+        ys.dedup();
+        ys.len()
+    });
+    assert_eq!(rows, 2);
 }

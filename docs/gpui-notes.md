@@ -135,3 +135,7 @@ Lessons learned while building with gpui-kit 0.7.x (`gpui-pre` 0.3.x). Add to th
   `render_frame`.
 - Gremlin Server returns `path()` (and `select()`) vertices without properties; the graph marks such
   vertices as placeholders and fetches them with `g.V(ids)` so captions appear.
+- Toolbar dropdowns: `use gpui_kit::component::menu::DropdownMenu as _;` then
+  `Button::new(..).dropdown_menu(|menu, window, cx| menu.item(PopupMenuItem::new("x").checked(on).on_click(..)))`.
+- A background thread (the layout worker) cannot wake GPUI directly; the canvas polls its latest-wins frame
+  slot in `paint` and keeps calling `window.request_animation_frame()` while a layout runs.

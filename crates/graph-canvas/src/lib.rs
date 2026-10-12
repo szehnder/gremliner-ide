@@ -17,6 +17,8 @@ use gpui_kit::{
     Render, ScrollDelta, ScrollWheelEvent, SharedString, Styled, Window, canvas, div, fill,
     outline, point, px, size,
 };
+use graph_layout::worker::{LayoutJob, LayoutWorker};
+use graph_layout::{LayoutGraph, LayoutKind, LayoutOptions};
 use graph_store::view::minimap::MinimapTransform;
 use graph_store::view::{
     Camera, Lod, SceneParams, SceneStats, SpatialGrid, Subset, Vec2, rect_from_points,
@@ -51,6 +53,8 @@ struct CameraAnim {
     to: Camera,
     started: Instant,
     duration_ms: f32,
+    /// Keep the target centred on this node (it may move while a layout runs).
+    follow: Option<NodeIx>,
 }
 
 /// Duration of camera tweens (ADR-0023 motion token).
@@ -92,6 +96,19 @@ pub struct GraphCanvas {
     camera_anim: Option<CameraAnim>,
     /// The user panned or zoomed since the last fit (hosts stop auto-fitting then).
     camera_touched: bool,
+    layout: Option<LayoutWorker>,
+    /// Generation of the running layout job (frames of other generations are ignored).
+    layout_generation: u64,
+    layout_running: bool,
+    /// Fit the camera (animated) when the running layout finishes.
+    fit_after_layout: bool,
+}
+
+/// What to lay out: everything, or only some nodes (incremental placement keeps the rest still).
+#[derive(Clone, Debug, PartialEq)]
+pub enum LayoutScope {
+    All,
+    Only(Vec<NodeIx>),
 }
 
 impl EventEmitter<CanvasEvent> for GraphCanvas {}
@@ -125,6 +142,137 @@ impl GraphCanvas {
             context_node: None,
             camera_anim: None,
             camera_touched: false,
+            layout: None,
+            layout_generation: 0,
+            layout_running: false,
+            fit_after_layout: false,
+        }
+    }
+
+    /// Start `kind` on the current graph (replacing a running layout). Pinned nodes stay; with
+    /// [`LayoutScope::Only`], every other node stays too. `fit` animates the camera to the result.
+    pub fn run_layout(
+        &mut self,
+        kind: LayoutKind,
+        options: LayoutOptions,
+        scope: LayoutScope,
+        fit: bool,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let g = &self.store;
+        let n = g.node_count();
+        if n == 0 {
+            return;
+        }
+        let (srcs, dsts) = g.edge_endpoints();
+        let graph = LayoutGraph::new(n, srcs.iter().zip(dsts).map(|(a, b)| [a.0, b.0]));
+        let pinned: Vec<bool> = g
+            .node_flags()
+            .iter()
+            .map(|f| f & flags::PINNED != 0)
+            .collect();
+        let focus: Vec<u32> = g.selected().map(|n| n.0).collect();
+        let movable = match scope {
+            LayoutScope::All => None,
+            LayoutScope::Only(nodes) => {
+                let mut m = vec![false; n];
+                for x in nodes {
+                    if let Some(slot) = m.get_mut(x.0 as usize) {
+                        *slot = true;
+                    }
+                }
+                Some(m)
+            }
+        };
+        self.layout_generation += 1;
+        let job = LayoutJob {
+            generation: self.layout_generation,
+            graph: Arc::new(graph),
+            positions: g.positions().to_vec(),
+            pinned,
+            kind,
+            options,
+            focus,
+            movable,
+        };
+        self.layout.get_or_insert_with(LayoutWorker::spawn).run(job);
+        self.layout_running = true;
+        self.fit_after_layout = fit;
+        cx.notify();
+    }
+
+    /// Stop the running layout; nodes stay where they are from the next frame on.
+    pub fn stop_layout(&mut self, cx: &mut Context<'_, Self>) {
+        if let Some(w) = &self.layout {
+            w.stop();
+        }
+        self.layout_generation += 1;
+        self.layout_running = false;
+        self.fit_after_layout = false;
+        cx.notify();
+    }
+
+    pub fn is_layout_running(&self) -> bool {
+        self.layout_running
+    }
+
+    /// Frame timings (tests and the perf HUD).
+    pub fn frame_stats(&self) -> &FrameStats {
+        &self.stats
+    }
+
+    /// Applies the newest layout frame, if any. Returns true while the layout keeps running.
+    fn apply_layout_frame(&mut self) -> bool {
+        if !self.layout_running {
+            return false;
+        }
+        let Some(frame) = self.layout.as_ref().and_then(LayoutWorker::take_frame) else {
+            return true;
+        };
+        if frame.generation != self.layout_generation {
+            return true;
+        }
+        let dragged = match self.drag {
+            Drag::Node { node, .. } => Some(node),
+            _ => None,
+        };
+        let g = self.graph_mut();
+        if frame.positions.len() == g.node_count() {
+            let mut positions = frame.positions;
+            // Pinned and dragged nodes keep their current positions.
+            for (i, f) in g.node_flags().iter().enumerate() {
+                if f & flags::PINNED != 0 || dragged == Some(NodeIx(i as u32)) {
+                    positions[i] = g.positions()[i];
+                }
+            }
+            g.set_positions(&positions);
+        }
+        if frame.done {
+            self.layout_running = false;
+            if std::mem::take(&mut self.fit_after_layout) && !self.camera_touched {
+                self.animate_fit();
+            }
+        }
+        self.layout_running
+    }
+
+    /// Tween the camera to fit the graph.
+    fn animate_fit(&mut self) {
+        if let Some(b) = self.store.bounds() {
+            let r = self.params.node_radius;
+            let to = Camera::fit(
+                [b[0] - r, b[1] - r, b[2] + r, b[3] + r],
+                self.viewport(),
+                32.0,
+                1.0,
+            );
+            self.camera_anim = Some(CameraAnim {
+                from: self.camera,
+                to,
+                started: Instant::now(),
+                duration_ms: CAMERA_TWEEN_MS,
+                follow: None,
+            });
         }
     }
 
@@ -185,14 +333,21 @@ impl GraphCanvas {
             to,
             started: Instant::now(),
             duration_ms: CAMERA_TWEEN_MS,
+            follow: Some(n),
         });
     }
 
     /// Advances the camera tween; returns true while it runs.
     fn step_camera_anim(&mut self) -> bool {
-        let Some(anim) = self.camera_anim else {
+        let Some(mut anim) = self.camera_anim else {
             return false;
         };
+        if let Some(n) = anim.follow
+            && (n.0 as usize) < self.store.node_count()
+        {
+            anim.to.center = self.store.position(n);
+            self.camera_anim = Some(anim);
+        }
         let t = (anim.started.elapsed().as_secs_f32() * 1000.0 / anim.duration_ms).min(1.0);
         // Ease out cubic.
         let k = 1.0 - (1.0 - t).powi(3);
@@ -458,8 +613,14 @@ impl GraphCanvas {
             Drag::Node { node, grab_offset } => {
                 let (node, off) = (*node, *grab_offset);
                 let w = self.camera.screen_to_world(s, viewport);
-                self.graph_mut()
-                    .set_position(node, [w[0] + off[0], w[1] + off[1]]);
+                let p = [w[0] + off[0], w[1] + off[1]];
+                self.graph_mut().set_position(node, p);
+                // A running layout treats the dragged node as pinned where it is.
+                if self.layout_running
+                    && let Some(worker) = &self.layout
+                {
+                    worker.pin(node.0, Some(p));
+                }
             }
             Drag::Rect { current, .. } => *current = s,
             Drag::Minimap => self.center_from_minimap(s),
@@ -615,7 +776,9 @@ fn paint_frame(
     // Advance animations (benchmark camera path, inertia) before drawing.
     let (animating, finished_bench) = entity.update(cx, |this, _| {
         let dt = this.stats.intervals_ms.last().copied().unwrap_or(16.0) / 1000.0;
-        let mut animating = this.step_inertia(dt.min(0.05)) | this.step_camera_anim();
+        // Layout first, so a camera tween that follows a node aims at its new position.
+        let mut animating =
+            this.apply_layout_frame() | this.step_inertia(dt.min(0.05)) | this.step_camera_anim();
         let mut finished = None;
         let vp = this.viewport();
         if let Some(run) = &mut this.bench {

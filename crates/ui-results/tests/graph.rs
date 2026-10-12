@@ -108,7 +108,15 @@ fn modern() -> Vec<GValue> {
     ]
 }
 
+/// Ingest as a finished run and stop the layout, so node positions stay put for clicks.
 fn ingest(view: &Entity<GraphView>, items: Vec<GValue>, cx: &mut VisualTestContext) {
+    ingest_running(view, items, cx);
+    cx.update(|_, cx| view.update(cx, |v, cx| v.stop_layout(cx)));
+    cx.update(|window, cx| window.render_frame(cx));
+}
+
+/// Ingest as a finished run, leaving the layout running.
+fn ingest_running(view: &Entity<GraphView>, items: Vec<GValue>, cx: &mut VisualTestContext) {
     cx.update(|_, cx| view.update(cx, |v, cx| v.ingest(1, &items, true, cx)));
     // Lay out and fit.
     cx.update(|window, cx| window.render_frame(cx));
@@ -253,7 +261,9 @@ fn scenario_graph_view_find_a_node(cx: &mut TestAppContext) {
             edge(102, "route", (3, "airport"), (4, "airport")),
         ])
         .collect();
-    ingest(&view, airports, &mut cx);
+    cx.executor().allow_parking();
+    ingest_running(&view, airports, &mut cx);
+    settle_layout(&view, &mut cx);
     let lhr = node(&view, 3, &mut cx);
     let search = cx.update(|_, cx| view.read(cx).search_input().clone());
     cx.update(|window, cx| search.update(cx, |s, cx| s.focus(window, cx)));
@@ -363,4 +373,96 @@ fn clear_and_accumulate_modes(cx: &mut TestAppContext) {
         })
     });
     assert_eq!(cx.update(|_, cx| view.read(cx).stats(cx).nodes), 3);
+}
+
+/// Render frames (real time) until the graph's layout has finished.
+fn settle_layout(view: &Entity<GraphView>, cx: &mut VisualTestContext) {
+    let started = std::time::Instant::now();
+    loop {
+        cx.update(|window, cx| window.render_frame(cx));
+        if !cx.update(|_, cx| view.read(cx).is_layout_running(cx)) {
+            return;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "layout did not finish"
+        );
+        std::thread::sleep(Duration::from_millis(8));
+    }
+}
+
+#[gpui_kit::test]
+fn scenario_graph_layouts_expand_keeps_context(cx: &mut TestAppContext) {
+    cx.executor().allow_parking();
+    let (view, mut cx) = mount(cx);
+    let items: Vec<GValue> = (1..=12)
+        .map(|i| vertex(i, "airport", &[]))
+        .chain((2..=12).map(|i| edge(100 + i, "route", (1, "airport"), (i, "airport"))))
+        .collect();
+    ingest_running(&view, items, &mut cx);
+    assert!(
+        cx.update(|_, cx| view.read(cx).is_layout_running(cx)),
+        "a new graph is laid out"
+    );
+    settle_layout(&view, &mut cx);
+    let before = cx.update(|_, cx| view.read(cx).store(cx).positions().to_vec());
+
+    // Expand node 5: capture the request and answer it with five new neighbours.
+    let request = std::rc::Rc::new(std::cell::RefCell::new(None));
+    let sink = request.clone();
+    let _sub = cx.update(|_, cx| {
+        cx.subscribe(&view, move |_, event: &GraphViewEvent, _| {
+            if let GraphViewEvent::Fetch(r) = event {
+                sink.borrow_mut().replace(r.clone());
+            }
+        })
+    });
+    let n5 = node(&view, 5, &mut cx);
+    cx.update(|_, cx| {
+        view.update(cx, |v, cx| {
+            v.expand(n5, graph_view::ExpandDirection::Both, None, cx)
+        })
+    });
+    let request = request.borrow_mut().take().expect("expand request");
+    let rows: Vec<GValue> = (20..25)
+        .map(|i| {
+            let mut m = new_map();
+            m.insert(
+                gremlin_model::GKey::String("e".into()),
+                edge(200 + i, "route", (5, "airport"), (i, "airport")),
+            );
+            m.insert(
+                gremlin_model::GKey::String("v".into()),
+                vertex(i, "airport", &[("code", GValue::String(format!("N{i}")))]),
+            );
+            GValue::Map(m)
+        })
+        .collect();
+    cx.update(|_, cx| view.update(cx, |v, cx| v.apply_fetch(&request, Ok(rows), cx)));
+    settle_layout(&view, &mut cx);
+
+    let (after, zoom, p5) = cx.update(|_, cx| {
+        let v = view.read(cx);
+        (
+            v.store(cx).positions().to_vec(),
+            v.canvas().read(cx).camera().zoom,
+            v.store(cx).position(n5),
+        )
+    });
+    // Previously placed nodes move by less than 10% of the viewport width (1200 px).
+    let limit = 0.1 * 1200.0 / zoom;
+    for (i, (a, b)) in before.iter().zip(&after).enumerate() {
+        let d = ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt();
+        assert!(d < limit, "node {i} moved {d} (limit {limit})");
+    }
+    // New nodes sit around the expanded node rather than across the graph.
+    let hub = after[0];
+    for p in &after[before.len()..] {
+        let to5 = ((p[0] - p5[0]).powi(2) + (p[1] - p5[1]).powi(2)).sqrt();
+        let to_hub = ((p[0] - hub[0]).powi(2) + (p[1] - hub[1]).powi(2)).sqrt();
+        assert!(
+            to5 < to_hub,
+            "a new neighbour is closer to the expanded node than to the hub"
+        );
+    }
 }
