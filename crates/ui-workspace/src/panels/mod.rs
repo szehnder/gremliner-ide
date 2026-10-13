@@ -5,6 +5,7 @@
 
 mod assistant;
 mod connections;
+pub mod debug_view;
 mod editor_tab;
 mod empty;
 mod inspector;

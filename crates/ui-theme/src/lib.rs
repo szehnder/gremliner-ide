@@ -206,6 +206,11 @@ impl Tokens {
         cx.theme().primary.opacity(0.07)
     }
 
+    /// The debugger's current step.
+    pub fn debug_step_highlight(cx: &App) -> Hsla {
+        cx.theme().primary.opacity(0.22)
+    }
+
     /// Steps an assistant explanation points at.
     pub fn hint_highlight(cx: &App) -> Hsla {
         cx.theme().warning.opacity(0.25)

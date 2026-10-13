@@ -1,11 +1,9 @@
-//! Gremlin step-through debugger session logic.
-//!
-//! See `AGENTS.md` for crate layering rules and `openspec/ROADMAP.md` for the change that fills this crate in.
+//! The Gremlin step-through debugger (query-debugger): a session over one read-only statement with
+//! navigation, and the queries it runs at each step: prefixes, capped counts, traversal simulation and
+//! single-element inspection. Pure logic; the app runs the queries (ADR-0004).
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn crate_compiles() {
-        assert_eq!(env!("CARGO_PKG_NAME"), "debugger");
-    }
-}
+pub mod query;
+pub mod session;
+
+pub use query::{ElementKind, IDS, format_count};
+pub use session::{DebugStep, Session, StartError};

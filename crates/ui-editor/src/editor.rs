@@ -71,6 +71,10 @@ pub struct QueryEditor {
     /// Steps an explanation item points at (assistant hover).
     hint_highlight: RangeDecorationCollection,
     hint_ranges: Vec<Range<usize>>,
+    /// The debugger's current step.
+    debug_highlight: RangeDecorationCollection,
+    debug_step: Option<Range<usize>>,
+    read_only: bool,
     highlighted: Option<Range<usize>>,
     last_cursor: usize,
     /// Schema, schema warnings and recent completions, shared with the completion and fix providers.
@@ -112,6 +116,9 @@ impl QueryEditor {
         let hint_highlight = state.update(cx, |s, cx| {
             s.create_range_decorations_collection(Vec::new(), cx)
         });
+        let debug_highlight = state.update(cx, |s, cx| {
+            s.create_range_decorations_collection(Vec::new(), cx)
+        });
         let subscriptions = vec![
             cx.subscribe_in(&state, window, |this, _, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::Change) {
@@ -132,6 +139,9 @@ impl QueryEditor {
             statement_highlight,
             error_highlight,
             hint_highlight,
+            debug_highlight,
+            debug_step: None,
+            read_only: false,
             hint_ranges: Vec::new(),
             highlighted: None,
             last_cursor: usize::MAX,
@@ -561,6 +571,38 @@ impl QueryEditor {
 
     pub fn hint_ranges(&self) -> &[Range<usize>] {
         &self.hint_ranges
+    }
+
+    /// Mark the debugger's current step (`None` clears).
+    pub fn set_debug_step(&mut self, range: Option<Range<usize>>, cx: &mut Context<'_, Self>) {
+        let len = self.latest_text.len();
+        let range = range.filter(|r| r.end <= len);
+        let decorations = range
+            .iter()
+            .map(|r| {
+                RangeDecoration::new(r.clone())
+                    .with_style(RangeDecorationStyle::Fill)
+                    .with_color(tokens::debug_step_highlight(cx))
+            })
+            .collect();
+        self.debug_highlight.set(decorations, cx);
+        self.debug_step = range;
+        cx.notify();
+    }
+
+    pub fn debug_step(&self) -> Option<&Range<usize>> {
+        self.debug_step.as_ref()
+    }
+
+    /// Lock the text (a debug session runs on it).
+    pub fn set_read_only(&mut self, read_only: bool, cx: &mut Context<'_, Self>) {
+        self.read_only = read_only;
+        self.state.update(cx, |s, cx| s.set_disabled(read_only, cx));
+        cx.notify();
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
     }
 
     /// Move the cursor to a diagnostic (problems list click).

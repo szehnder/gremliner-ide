@@ -211,3 +211,10 @@ test in its own window: `gpui_kit::open_window(.., |_, cx| cx.new(|_| View::new(
 
 Typing with `window.input(c)` inserts at the cursor. A field with a default value (the host field's
 `localhost`) needs `set_value("")` first, or the typed text is prepended to it.
+
+## Editor: no inline annotations
+
+The gpui-kit code editor supports range decorations (`create_range_decorations_collection`, with Fill or
+Frame and an optional colour), diagnostics and completion. It has no inlay hints and no virtual text, so
+per-step annotations (the debugger's counts) have to live outside the text. `InputBaseState::set_disabled`
+makes the editor read-only.

@@ -2070,7 +2070,10 @@ dependencies = [
 name = "debugger"
 version = "0.1.0"
 dependencies = [
+ "gremlin-client",
+ "gremlin-model",
  "gremlin-syntax",
+ "tokio",
 ]
 
 [[package]]
@@ -8752,6 +8755,7 @@ name = "ui-workspace"
 version = "0.1.0"
 dependencies = [
  "assistant",
+ "debugger",
  "futures",
  "gpui-kit",
  "graph-layout",

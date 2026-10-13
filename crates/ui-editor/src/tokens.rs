@@ -30,3 +30,7 @@ pub fn statement_highlight(cx: &App) -> Hsla {
 pub fn hint_highlight(cx: &App) -> Hsla {
     Tokens::hint_highlight(cx)
 }
+
+pub fn debug_step_highlight(cx: &App) -> Hsla {
+    Tokens::debug_step_highlight(cx)
+}

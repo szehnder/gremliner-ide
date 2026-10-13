@@ -485,6 +485,7 @@ impl Runner {
         }
         let base = request.range.start;
         let tab_id = request.tab_id;
+        let generated = request.generated;
         let script = request.text.clone();
         cx.spawn_in(window, async move |this, cx| {
             // Connect first if needed.
@@ -562,7 +563,7 @@ impl Runner {
                 });
             }
             let error_range = result.read_with(cx, |r, _| match &r.status {
-                RunStatus::Failed(e) => e.range.clone(),
+                RunStatus::Failed(e) if !generated => e.range.clone(),
                 _ => None,
             });
             let _ = cx.update(|window, cx| {

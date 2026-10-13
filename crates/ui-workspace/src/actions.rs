@@ -27,6 +27,14 @@ actions!(
     ]
 );
 
+/// Debugger commands (query-debugger), handled by the active editor tab.
+pub mod debug {
+    gpui_kit::actions!(
+        debug,
+        [StartDebug, StepOver, StepInto, StepOut, StepBack, StopDebug]
+    );
+}
+
 /// Graph view commands, declared by `ui-results` and re-exported for the palette and keymap.
 pub mod graph {
     pub use ui_results::graph_view::{

@@ -28,6 +28,7 @@ uuid.workspace = true
 gremlin-client.workspace = true
 gremlin-model.workspace = true
 gremlin-syntax.workspace = true
+debugger.workspace = true
 
 [dev-dependencies]
 graph-layout.workspace = true

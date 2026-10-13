@@ -126,6 +126,14 @@ fn register_commands(cx: &mut App) {
             .when(When::EditorOpen)
             .keywords(&["plan", "strategies"]),
         CommandMeta::new("Editor", "Format Query", editor::FormatQuery).when(When::EditorOpen),
+        CommandMeta::new("Debug", "Debug Query", debug::StartDebug)
+            .when(When::EditorOpen)
+            .keywords(&["step", "debugger", "trace"]),
+        CommandMeta::new("Debug", "Step Over", debug::StepOver).when(When::EditorOpen),
+        CommandMeta::new("Debug", "Step Into", debug::StepInto).when(When::EditorOpen),
+        CommandMeta::new("Debug", "Step Out", debug::StepOut).when(When::EditorOpen),
+        CommandMeta::new("Debug", "Step Back", debug::StepBack).when(When::EditorOpen),
+        CommandMeta::new("Debug", "Stop Debugging", debug::StopDebug).when(When::EditorOpen),
         CommandMeta::new(
             "Assistant",
             "Ask in Plain English",

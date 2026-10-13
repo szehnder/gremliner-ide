@@ -18,12 +18,15 @@ use storage::{Storage, TabRow};
 use ui_editor::{QueryEditor, QueryEditorEvent};
 use uuid::Uuid;
 
+use super::debug_view::{DebugView, DebugViewEvent};
 use super::{WorkspacePanel, panel_basics};
+use crate::actions::debug::{StartDebug, StepBack, StepInto, StepOut, StepOver, StopDebug};
 use crate::actions::editor::{ExplainQuery, FormatQuery, ProfileQuery, RunQuery};
 use crate::connections::ConnectionManager;
 use crate::connections::style::{color_tag_color, environment_badge};
 use crate::settings::AppSettings;
 use crate::theme::Tokens;
+use gpui_kit::component::notification::Notification;
 use ui_assistant::{Disclosure, OpenPromptBar, PromptBar, PromptBarEvent};
 
 /// How long edits settle before a tab is written.
@@ -38,6 +41,8 @@ pub struct RunRequest {
     pub range: Range<usize>,
     /// Run, profile or explain.
     pub mode: ui_editor::RunMode,
+    /// A query the app generated (the debugger's prefixes): errors are not mapped onto the editor text.
+    pub generated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +155,9 @@ pub struct EditorPanel {
     /// The assistant prompt bar, while open.
     prompt: Option<Entity<PromptBar>>,
     prompt_task: Option<Task<()>>,
+    /// The debug session on this tab, while one runs.
+    debug: Option<Entity<DebugView>>,
+    _debug_subscription: Option<Subscription>,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
@@ -238,6 +246,8 @@ impl EditorPanel {
                 save_task: None,
                 prompt: None,
                 prompt_task: None,
+                debug: None,
+                _debug_subscription: None,
                 focus_handle: cx.focus_handle(),
                 _subscriptions: subscriptions,
             }
@@ -255,6 +265,85 @@ impl EditorPanel {
 
     pub fn editor(&self) -> &Entity<QueryEditor> {
         &self.editor
+    }
+
+    pub fn debug_view(&self) -> Option<&Entity<DebugView>> {
+        self.debug.as_ref()
+    }
+
+    /// Start debugging the statement at the cursor (Ctrl+F5).
+    pub fn start_debug(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.debug.is_some() {
+            return;
+        }
+        let Some(connection_id) = self.connection_id else {
+            window.push_notification(
+                Notification::warning("Choose a connection for this tab, then debug again.")
+                    .title("No connection"),
+                cx,
+            );
+            return;
+        };
+        let Some((text, range)) = self.editor.read(cx).run_target(cx) else {
+            return;
+        };
+        // The statement's own offset: leading whitespace in a selection is trimmed by the session.
+        let base = range.start + (text.len() - text.trim_start().len());
+        let session = match debugger::Session::start(text.trim_start()) {
+            Ok(s) => s,
+            Err(err) => {
+                window.push_notification(
+                    Notification::warning(err.message()).title("Cannot debug this query"),
+                    cx,
+                );
+                return;
+            }
+        };
+        let tab_id = self.id;
+        let view = cx.new(|cx| DebugView::new(session, base, tab_id, connection_id, cx));
+        self._debug_subscription = Some(cx.subscribe_in(
+            &view,
+            window,
+            |this, view, event: &DebugViewEvent, window, cx| match event {
+                DebugViewEvent::CurrentChanged => {
+                    let range = view.read(cx).current_range();
+                    this.editor
+                        .update(cx, |e, cx| e.set_debug_step(Some(range), cx));
+                }
+                DebugViewEvent::Stop => this.stop_debug(window, cx),
+            },
+        ));
+        self.debug = Some(view.clone());
+        self.editor.update(cx, |e, cx| e.set_read_only(true, cx));
+        view.update(cx, |v, cx| v.show_current(window, cx));
+        // Keys go to the tab now that the text is locked.
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
+    }
+
+    pub fn stop_debug(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.debug.take().is_none() {
+            return;
+        }
+        self._debug_subscription = None;
+        self.editor.update(cx, |e, cx| {
+            e.set_debug_step(None, cx);
+            e.set_read_only(false, cx);
+        });
+        let state = self.editor.read(cx).state().clone();
+        state.update(cx, |s, cx| s.focus(window, cx));
+        cx.notify();
+    }
+
+    fn with_debug(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+        f: fn(&mut DebugView, &mut Window, &mut Context<'_, DebugView>),
+    ) {
+        if let Some(view) = self.debug.clone() {
+            view.update(cx, |v, cx| f(v, window, cx));
+        }
     }
 
     pub fn connection_id(&self) -> Option<Uuid> {
@@ -335,6 +424,7 @@ impl EditorPanel {
             text,
             range,
             mode,
+            generated: false,
         };
         if let Some(id) = self.connection_id {
             ConnectionManager::global(cx).update(cx, |m, cx| m.set_active(Some(id), cx));
@@ -518,6 +608,14 @@ impl Render for EditorPanel {
                     })),
             )
             .child(
+                Button::new("editor-debug")
+                    .label("Debug")
+                    .ghost()
+                    .xsmall()
+                    .tooltip("Step through the statement (Ctrl+F5)")
+                    .on_click(cx.listener(|this, _, window, cx| this.start_debug(window, cx))),
+            )
+            .child(
                 Button::new("editor-explain")
                     .label("Explain")
                     .ghost()
@@ -560,9 +658,28 @@ impl Render for EditorPanel {
             .on_action(
                 cx.listener(|this, _: &OpenPromptBar, window, cx| this.open_prompt_bar(window, cx)),
             )
+            .on_action(cx.listener(|this, _: &StartDebug, window, cx| this.start_debug(window, cx)))
+            .on_action(cx.listener(|this, _: &StopDebug, window, cx| this.stop_debug(window, cx)))
+            .on_action(cx.listener(|this, _: &StepOver, window, cx| {
+                this.with_debug(window, cx, DebugView::step_over)
+            }))
+            .on_action(cx.listener(|this, _: &StepInto, window, cx| {
+                this.with_debug(window, cx, DebugView::step_into)
+            }))
+            .on_action(cx.listener(|this, _: &StepOut, window, cx| {
+                this.with_debug(window, cx, DebugView::step_out)
+            }))
+            .on_action(cx.listener(|this, _: &StepBack, window, cx| {
+                this.with_debug(window, cx, DebugView::step_back)
+            }))
             .child(toolbar)
             .children(self.prompt.clone())
             .child(div().flex_1().min_h_0().child(self.editor.clone()))
+            .children(
+                self.debug
+                    .clone()
+                    .map(|d| div().flex_none().h(Tokens::size(300.0)).child(d)),
+            )
     }
 }
 

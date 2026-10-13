@@ -33,3 +33,15 @@
 - Unit tests (insta) for generated prefix, count, simulation and inspection queries.
 - Integration tests on air-routes for each scenario.
 - Headless editor tests for debug mode, navigation keys and inline counts.
+
+## Implementation notes
+
+- **Counts are shown in a step strip, not inside the text.** The gpui-kit editor has range decorations
+  (fills and frames) but no inlay or virtual-text API. So the debug panel under the editor shows one chip
+  per step in source order, `has('code','AUS') · 1`, nested steps prefixed with `›`, and the current step
+  filled. Clicking a chip jumps to that step. The editor fills the current step's range.
+- **Branches.** Children of a step are split into separate traversals at commas, so `union(a, b)` gives
+  two chains. A nested step's prefix is `<before parent>.flatMap(__.<chain up to the step>)`.
+- **Simulation and inspection** trace main-traversal steps. A nested current step traces from the main
+  step that contains it. Both are unavailable when a later step merges traversers (`count`, `fold`,
+  `group`, ...), and the panel says why.
