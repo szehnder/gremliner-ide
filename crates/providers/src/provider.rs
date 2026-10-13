@@ -65,6 +65,16 @@ pub fn restrictions_for(config: &ConnectionConfig) -> Restrictions {
     match config.provider.kind() {
         ProviderKind::GremlinServer => Restrictions::none(),
         ProviderKind::NeptuneAws => compliance::neptune(None),
+        ProviderKind::NeptuneLocalStack => compliance::neptune(
+            match &config.provider {
+                ProviderConfig::NeptuneLocalStack(c) => c
+                    .engine_version
+                    .as_deref()
+                    .and_then(crate::neptune::versions::tinkerpop_for),
+                _ => None,
+            }
+            .as_deref(),
+        ),
     }
 }
 
@@ -129,6 +139,12 @@ pub fn provider_for(
             neptune.clone(),
             Duration::from_millis(config.timeout_ms),
         ))),
+        ProviderConfig::NeptuneLocalStack(localstack) => Ok(Box::new(
+            crate::neptune::localstack::LocalStackProvider::new(
+                localstack.clone(),
+                Duration::from_millis(config.timeout_ms),
+            ),
+        )),
     }
 }
 

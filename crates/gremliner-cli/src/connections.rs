@@ -60,6 +60,22 @@ pub enum Cmd {
         /// Neptune: plain ws:// (stand-ins such as a local Gremlin Server).
         #[arg(long)]
         no_tls: bool,
+        /// Neptune on LocalStack: this cluster, looked up on each connect (`--url` is the LocalStack edge).
+        /// Without it, `--url` is the emulated cluster's host:port.
+        #[arg(long)]
+        localstack: bool,
+        #[arg(long)]
+        cluster: Option<String>,
+        /// LocalStack: sign with SigV4 using the test credentials.
+        #[arg(long)]
+        iam: bool,
+    },
+    /// List the Neptune clusters a LocalStack emulates.
+    LocalstackClusters {
+        #[arg(long, default_value = providers::config::LOCALSTACK_URL)]
+        url: String,
+        #[arg(long, default_value = "us-east-1")]
+        region: String,
     },
     /// List the AWS profiles Neptune connections can use.
     AwsProfiles {
@@ -136,6 +152,9 @@ pub fn run(cmd: Cmd, data_dir: Option<PathBuf>, runtime: &tokio::runtime::Runtim
             tunnel,
             no_iam,
             no_tls,
+            localstack,
+            cluster,
+            iam,
         } => {
             if let Err(err) = validate_name(&store.list()?, &name, None) {
                 bail!("{err}");
@@ -143,27 +162,47 @@ pub fn run(cmd: Cmd, data_dir: Option<PathBuf>, runtime: &tokio::runtime::Runtim
             let parsed =
                 endpoint::parse(&url).with_context(|| format!("not an endpoint: {url}"))?;
             let is_neptune = neptune || parsed.neptune_region.is_some();
-            let provider = match is_neptune {
-                true => ProviderConfig::NeptuneAws(NeptuneConfig {
-                    host: parsed.host.clone(),
-                    port: parsed.port.unwrap_or(8182),
-                    region: region.or(parsed.neptune_region.clone()).unwrap_or_default(),
-                    iam_auth: !no_iam,
-                    profile,
-                    tunnel,
-                    accept_invalid_certs,
-                    tls: !no_tls,
-                }),
-                false => ProviderConfig::GremlinServer(GremlinServerConfig {
-                    host: parsed.host.clone(),
-                    port: parsed.port.unwrap_or(8182),
-                    path: parsed.path.clone().unwrap_or_else(|| "/gremlin".into()),
-                    tls: parsed.tls.unwrap_or(false),
-                    accept_invalid_certs,
-                    username: user,
-                    alias,
+            let provider = if localstack {
+                let mut l = providers::LocalStackConfig {
+                    region: region.clone().unwrap_or_else(|| "us-east-1".into()),
+                    iam_auth: iam,
+                    tls: false,
                     ..Default::default()
-                }),
+                };
+                match cluster {
+                    Some(id) => {
+                        l.localstack_url = url.trim_end_matches('/').to_owned();
+                        l.cluster_id = Some(id);
+                    }
+                    None => {
+                        l.host = parsed.host.clone();
+                        l.port = parsed.port.unwrap_or(4510);
+                    }
+                }
+                ProviderConfig::NeptuneLocalStack(l)
+            } else {
+                match is_neptune {
+                    true => ProviderConfig::NeptuneAws(NeptuneConfig {
+                        host: parsed.host.clone(),
+                        port: parsed.port.unwrap_or(8182),
+                        region: region.or(parsed.neptune_region.clone()).unwrap_or_default(),
+                        iam_auth: !no_iam,
+                        profile,
+                        tunnel,
+                        accept_invalid_certs,
+                        tls: !no_tls,
+                    }),
+                    false => ProviderConfig::GremlinServer(GremlinServerConfig {
+                        host: parsed.host.clone(),
+                        port: parsed.port.unwrap_or(8182),
+                        path: parsed.path.clone().unwrap_or_else(|| "/gremlin".into()),
+                        tls: parsed.tls.unwrap_or(false),
+                        accept_invalid_certs,
+                        username: user,
+                        alias,
+                        ..Default::default()
+                    }),
+                }
             };
             let mut config = ConnectionConfig::new(name, provider);
             config.environment = env.into();
@@ -210,6 +249,31 @@ pub fn run(cmd: Cmd, data_dir: Option<PathBuf>, runtime: &tokio::runtime::Runtim
                     }
                     if !err.detail.is_empty() {
                         eprintln!("({})", storage::secrets::redact(&err.detail));
+                    }
+                    std::process::exit(1);
+                }
+            }
+        }
+        Cmd::LocalstackClusters { url, region } => {
+            let config = providers::LocalStackConfig {
+                localstack_url: url,
+                region,
+                ..Default::default()
+            };
+            match runtime.block_on(providers::neptune::localstack::discover(&config)) {
+                Ok(clusters) => {
+                    for c in clusters {
+                        println!(
+                            "{:<24} {:<10} {}:{}  {}",
+                            c.id, c.engine_version, c.endpoint, c.port, c.status
+                        );
+                    }
+                }
+                Err(err) => {
+                    let err = providers::ProviderError::from(err);
+                    eprintln!("FAILED: {}", err.reason);
+                    if !err.suggestion.is_empty() {
+                        eprintln!("{}", err.suggestion);
                     }
                     std::process::exit(1);
                 }

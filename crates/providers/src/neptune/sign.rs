@@ -24,11 +24,23 @@ pub fn sign_request<B>(
     region: &str,
     time: SystemTime,
 ) -> Result<(), String> {
+    sign_service(request, body, creds, region, SERVICE, time)
+}
+
+/// [`sign_request`] for another AWS service (LocalStack discovery signs for `rds`).
+pub fn sign_service<B>(
+    request: &mut http::Request<B>,
+    body: &[u8],
+    creds: &Credentials,
+    region: &str,
+    service: &str,
+    time: SystemTime,
+) -> Result<(), String> {
     let identity: Identity = creds.clone().into();
     let params = v4::SigningParams::builder()
         .identity(&identity)
         .region(region)
-        .name(SERVICE)
+        .name(service)
         .time(time)
         .settings(SigningSettings::default())
         .build()

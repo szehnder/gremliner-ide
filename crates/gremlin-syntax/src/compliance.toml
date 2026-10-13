@@ -18,7 +18,7 @@ call = "Neptune does not support call()."
 # Steps by the TinkerPop release that introduced them: a server older than `since` rejects them.
 [[added]]
 since = "3.6.0"
-steps = ["mergeV", "mergeE", "call"]
+steps = ["mergeV", "mergeE", "call", "element", "fail"]
 
 [[added]]
 since = "3.7.0"

@@ -4,8 +4,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-mod support;
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -86,7 +84,7 @@ impl ProvideCredentials for RotatingRef {
     }
 }
 
-fn config_for(server: &support::FakeNeptune, tls: bool) -> NeptuneConfig {
+fn config_for(server: &providers::testing::FakeNeptune, tls: bool) -> NeptuneConfig {
     NeptuneConfig {
         host: HOST.into(),
         port: 8182,
@@ -157,10 +155,11 @@ async fn static_profile_credentials_resolve() {
 
 #[tokio::test]
 async fn scenario_provider_neptune_aws_signed_handshake() {
-    let server = support::start(support::Options {
+    let server = providers::testing::start(providers::testing::Options {
         tls_host: None,
         keys: Rotating::keys(3),
         region: REGION.into(),
+        status: true,
     })
     .await;
     let (creds, _) = cache(Duration::from_secs(3600), Duration::ZERO);
@@ -191,10 +190,11 @@ async fn scenario_provider_neptune_aws_signed_handshake() {
 
 #[tokio::test]
 async fn bad_signature_is_explained() {
-    let server = support::start(support::Options {
+    let server = providers::testing::start(providers::testing::Options {
         tls_host: None,
         keys: HashMap::from([("AKID1".to_owned(), "a-different-secret".to_owned())]),
         region: REGION.into(),
+        status: true,
     })
     .await;
     let (creds, _) = cache(Duration::from_secs(3600), Duration::ZERO);
@@ -207,10 +207,11 @@ async fn bad_signature_is_explained() {
 
 #[tokio::test]
 async fn scenario_provider_neptune_aws_connect_through_localhost_tunnel() {
-    let server = support::start(support::Options {
+    let server = providers::testing::start(providers::testing::Options {
         tls_host: Some(HOST.into()),
         keys: Rotating::keys(3),
         region: REGION.into(),
+        status: true,
     })
     .await;
     let (creds, _) = cache(Duration::from_secs(3600), Duration::ZERO);
@@ -237,10 +238,11 @@ async fn scenario_provider_neptune_aws_connect_through_localhost_tunnel() {
 
 #[tokio::test]
 async fn scenario_provider_neptune_aws_refresh_before_expiry() {
-    let server = support::start(support::Options {
+    let server = providers::testing::start(providers::testing::Options {
         tls_host: None,
         keys: Rotating::keys(5),
         region: REGION.into(),
+        status: true,
     })
     .await;
     let (creds, rotating) = cache(Duration::from_millis(600), Duration::ZERO);
@@ -278,7 +280,7 @@ async fn scenario_provider_neptune_aws_refresh_before_expiry() {
 
 #[test]
 fn scenario_provider_neptune_aws_status_parsed() {
-    let status = NeptuneStatus::parse(support::STATUS).unwrap();
+    let status = NeptuneStatus::parse(providers::testing::STATUS).unwrap();
     assert_eq!(status.engine_version, "1.4.5.0.R2");
     assert_eq!(status.tinkerpop_version.as_deref(), Some("3.7.3"));
     assert_eq!(status.role.as_deref(), Some("writer"));

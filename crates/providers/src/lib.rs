@@ -10,10 +10,12 @@ pub mod provider;
 pub mod read_only;
 pub mod schema;
 pub mod store;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub use config::{
-    ColorTag, ConnectionConfig, Environment, GremlinServerConfig, NeptuneConfig, ProviderConfig,
-    ProviderKind,
+    ColorTag, ConnectionConfig, Environment, GremlinServerConfig, LocalStackConfig, NeptuneConfig,
+    ProviderConfig, ProviderKind,
 };
 pub use error::{FailureKind, ProviderError};
 pub use provider::{

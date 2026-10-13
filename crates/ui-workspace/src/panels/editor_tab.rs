@@ -748,7 +748,7 @@ impl EditorPanel {
         let neptune = manager
             .read(cx)
             .get(connection)
-            .is_some_and(|c| c.provider.kind() == providers::ProviderKind::NeptuneAws);
+            .is_some_and(|c| c.provider.kind().is_neptune());
         let current_query = Some(self.editor.read(cx).text(cx)).filter(|t| !t.trim().is_empty());
         let weak_bar = bar.downgrade();
         self.prompt_task = Some(cx.spawn_in(window, async move |_, cx| {

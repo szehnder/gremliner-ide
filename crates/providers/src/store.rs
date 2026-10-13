@@ -124,7 +124,7 @@ impl ConnectionStore {
             }
             PasswordChange::Keep => match &config.provider {
                 ProviderConfig::GremlinServer(c) => c.has_password,
-                ProviderConfig::NeptuneAws(_) => false,
+                ProviderConfig::NeptuneAws(_) | ProviderConfig::NeptuneLocalStack(_) => false,
             },
         };
         if let ProviderConfig::GremlinServer(c) = &mut config.provider {

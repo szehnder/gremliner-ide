@@ -1,0 +1,2 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ErrorResponse xmlns="http://rds.amazonaws.com/doc/2014-10-31/"><Error><Code>InternalFailure</Code><Message>API for service 'rds' not yet implemented or pro feature - please check https://docs.localstack.cloud/references/coverage/ for further information</Message></Error><RequestId>1a2b3c4d-0000-1111-2222-333344445555</RequestId></ErrorResponse>

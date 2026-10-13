@@ -8,7 +8,7 @@ use assistant::{Context, Dialect, DryRun, Options, Outcome, PipelineEvent, Shape
 use gremlin_model::plain::to_json;
 use llm::{LlmClient, ProfileStore};
 use providers::schema::{discover_schema, load_cached, save_cached};
-use providers::{ConnectionConfig, ProviderKind, Session, provider_for};
+use providers::{ConnectionConfig, Session, provider_for};
 use serde::Deserialize;
 use storage::Storage;
 
@@ -72,7 +72,7 @@ async fn setup(
         schema: Some(Arc::new(schema)),
         dialect: Dialect {
             tinkerpop_version: session.info.tinkerpop_version.clone(),
-            neptune: config.provider.kind() == ProviderKind::NeptuneAws,
+            neptune: config.provider.kind().is_neptune(),
         },
         current_query: None,
         share_samples,

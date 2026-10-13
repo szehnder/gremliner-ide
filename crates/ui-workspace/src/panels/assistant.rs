@@ -255,7 +255,7 @@ impl AssistantPanel {
         let neptune = manager
             .read(cx)
             .get(connection)
-            .is_some_and(|c| c.provider.kind() == providers::ProviderKind::NeptuneAws);
+            .is_some_and(|c| c.provider.kind().is_neptune());
         let client_task = profiles.read(cx).client(profile, None, cx);
         let weak_view = view.downgrade();
         let task = cx.spawn_in(window, async move |this, cx| {

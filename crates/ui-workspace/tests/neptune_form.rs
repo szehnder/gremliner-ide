@@ -162,3 +162,60 @@ fn neptune_section_profiles_and_tunnel(cx: &mut TestAppContext) {
     };
     assert_eq!(n.profile, None);
 }
+
+#[gpui_kit::test]
+async fn localstack_section_discovers_and_picks_a_cluster(cx: &mut TestAppContext) {
+    let mut cx = setup(cx);
+    let edge = RUNTIME.block_on(providers::testing::start_localstack(
+        200,
+        providers::testing::CLUSTERS_XML.into(),
+        "us-east-1",
+    ));
+    let form = cx.update(|window, cx| form::open(None, window, cx));
+    cx.run_until_parked();
+    support::click_settled(&mut cx, "conn-provider-localstack");
+    assert_eq!(
+        text(&form, |f| &f.host, &mut cx),
+        "localhost.localstack.cloud",
+        "LocalStack defaults"
+    );
+    type_into(&form, |f| &f.name, "Local Neptune", &mut cx);
+    type_into(&form, |f| &f.localstack_url, &edge.url(), &mut cx);
+    support::click_settled(&mut cx, "ls-discover");
+    for _ in 0..200 {
+        cx.run_until_parked();
+        let done = cx.update(|_, cx| {
+            matches!(
+                form.read(cx).ls_discovery,
+                form::DiscoveryState::Done | form::DiscoveryState::Failed(_)
+            )
+        });
+        if done {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        cx.update(|_, cx| matches!(form.read(cx).ls_discovery, form::DiscoveryState::Done)),
+        "discovery finished"
+    );
+    support::click_settled(&mut cx, "ls-cluster-air-routes");
+    let (config, _) = cx.update(|_, cx| form.read(cx).to_config(cx)).unwrap();
+    let ProviderConfig::NeptuneLocalStack(l) = config.provider else {
+        panic!("{config:?}")
+    };
+    assert_eq!(l.cluster_id.as_deref(), Some("air-routes"));
+    assert_eq!(
+        (l.host.as_str(), l.port),
+        ("localhost.localstack.cloud", 4510)
+    );
+    assert_eq!(l.engine_version.as_deref(), Some("1.2.1.0"));
+    assert_eq!(l.localstack_url, edge.url());
+    // Manual entry instead.
+    support::click_settled(&mut cx, "ls-manual");
+    let (config, _) = cx.update(|_, cx| form.read(cx).to_config(cx)).unwrap();
+    let ProviderConfig::NeptuneLocalStack(l) = config.provider else {
+        panic!()
+    };
+    assert_eq!(l.cluster_id, None);
+}

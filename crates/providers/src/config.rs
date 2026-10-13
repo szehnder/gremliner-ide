@@ -49,6 +49,10 @@ impl ConnectionConfig {
         match &self.provider {
             ProviderConfig::GremlinServer(c) => format!("{}:{}", c.host, c.port),
             ProviderConfig::NeptuneAws(c) => format!("{}:{}", c.host, c.port),
+            ProviderConfig::NeptuneLocalStack(c) => match &c.cluster_id {
+                Some(id) => format!("{id} @ {}", c.localstack_url),
+                None => format!("{}:{}", c.host, c.port),
+            },
         }
     }
 }
@@ -140,12 +144,15 @@ pub enum ProviderConfig {
     GremlinServer(GremlinServerConfig),
     /// Amazon Neptune, with IAM SigV4 authentication.
     NeptuneAws(NeptuneConfig),
+    /// Neptune emulated by LocalStack, found with `DescribeDBClusters` (ADR-0017).
+    NeptuneLocalStack(LocalStackConfig),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderKind {
     GremlinServer,
     NeptuneAws,
+    NeptuneLocalStack,
 }
 
 impl ProviderKind {
@@ -153,7 +160,16 @@ impl ProviderKind {
         match self {
             ProviderKind::GremlinServer => "Gremlin Server",
             ProviderKind::NeptuneAws => "Amazon Neptune",
+            ProviderKind::NeptuneLocalStack => "Neptune (LocalStack)",
         }
+    }
+
+    /// Neptune's dialect and restrictions apply.
+    pub fn is_neptune(self) -> bool {
+        matches!(
+            self,
+            ProviderKind::NeptuneAws | ProviderKind::NeptuneLocalStack
+        )
     }
 }
 
@@ -162,6 +178,7 @@ impl ProviderConfig {
         match self {
             ProviderConfig::GremlinServer(_) => ProviderKind::GremlinServer,
             ProviderConfig::NeptuneAws(_) => ProviderKind::NeptuneAws,
+            ProviderConfig::NeptuneLocalStack(_) => ProviderKind::NeptuneLocalStack,
         }
     }
 }
@@ -286,6 +303,47 @@ impl NeptuneConfig {
             .as_deref()
             .map(str::trim)
             .filter(|t| !t.is_empty())
+    }
+}
+
+/// LocalStack's default edge URL.
+pub const LOCALSTACK_URL: &str = "http://localhost:4566";
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LocalStackConfig {
+    /// The LocalStack edge URL, for discovery.
+    pub localstack_url: String,
+    pub region: String,
+    /// The picked cluster: its endpoint and port are looked up again on each connect (they change when
+    /// LocalStack restarts). `None` connects to `host:port` directly.
+    pub cluster_id: Option<String>,
+    pub host: String,
+    pub port: u16,
+    /// The cluster's engine version, from discovery.
+    pub engine_version: Option<String>,
+    /// Sign with SigV4 using the test credentials below.
+    pub iam_auth: bool,
+    /// LocalStack test credentials (not real AWS keys; LocalStack accepts any).
+    pub access_key: String,
+    pub secret_key: String,
+    pub tls: bool,
+}
+
+impl Default for LocalStackConfig {
+    fn default() -> Self {
+        Self {
+            localstack_url: LOCALSTACK_URL.into(),
+            region: "us-east-1".into(),
+            cluster_id: None,
+            host: "localhost.localstack.cloud".into(),
+            port: 4510,
+            engine_version: None,
+            iam_auth: false,
+            access_key: "test".into(),
+            secret_key: "test".into(),
+            tls: false,
+        }
     }
 }
 

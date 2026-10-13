@@ -15,8 +15,8 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use providers::endpoint;
 use providers::{
-    ColorTag, ConnectionConfig, Environment, GremlinServerConfig, NeptuneConfig, PasswordChange,
-    ProviderConfig, ProviderError, ProviderKind, ServerInfo,
+    ColorTag, ConnectionConfig, Environment, GremlinServerConfig, LocalStackConfig, NeptuneConfig,
+    PasswordChange, ProviderConfig, ProviderError, ProviderKind, ServerInfo,
 };
 use uuid::Uuid;
 
@@ -64,6 +64,16 @@ impl FieldErrors {
     }
 }
 
+/// Finding LocalStack clusters.
+#[derive(Debug, Clone, Default)]
+pub enum DiscoveryState {
+    #[default]
+    Idle,
+    Running,
+    Done,
+    Failed(ProviderError),
+}
+
 #[derive(Debug, Clone, Default)]
 pub enum TestState {
     #[default]
@@ -93,6 +103,15 @@ pub struct ConnectionForm {
     pub aws_profiles: Vec<providers::neptune::AwsProfile>,
     /// The region last filled in from the host name (replaced as the host changes).
     inferred_region: Option<String>,
+    /// LocalStack: the edge URL used for discovery.
+    pub localstack_url: Entity<InputState>,
+    /// LocalStack: the picked cluster (`None`: host and port entered by hand).
+    pub ls_cluster: Option<String>,
+    ls_engine: Option<String>,
+    pub ls_clusters: Vec<providers::neptune::localstack::Cluster>,
+    pub ls_discovery: DiscoveryState,
+    ls_access_key: String,
+    ls_secret_key: String,
     pub tls: bool,
     pub accept_invalid_certs: bool,
     pub iam_auth: bool,
@@ -137,8 +156,25 @@ impl ConnectionForm {
                 ProviderConfig::GremlinServer(GremlinServerConfig::default()),
             )
         });
+        let localstack = match &config.provider {
+            ProviderConfig::NeptuneLocalStack(l) => l.clone(),
+            _ => LocalStackConfig::default(),
+        };
         let (server, neptune) = match &config.provider {
             ProviderConfig::GremlinServer(s) => (s.clone(), NeptuneConfig::default()),
+            ProviderConfig::NeptuneLocalStack(l) => (
+                GremlinServerConfig {
+                    host: l.host.clone(),
+                    port: l.port,
+                    tls: l.tls,
+                    ..Default::default()
+                },
+                NeptuneConfig {
+                    region: l.region.clone(),
+                    iam_auth: l.iam_auth,
+                    ..Default::default()
+                },
+            ),
             ProviderConfig::NeptuneAws(n) => (
                 GremlinServerConfig {
                     host: n.host.clone(),
@@ -175,6 +211,12 @@ impl ConnectionForm {
             cx,
             "Optional, e.g. localhost:8182",
             neptune.tunnel.as_deref().unwrap_or(""),
+        );
+        let localstack_url = input(
+            window,
+            cx,
+            providers::config::LOCALSTACK_URL,
+            &localstack.localstack_url,
         );
         let profiles = ConnectionManager::global(cx).read(cx).aws_profiles(cx);
         cx.spawn(async move |this, cx| {
@@ -227,6 +269,13 @@ impl ConnectionForm {
             aws_profile: neptune.profile.clone(),
             aws_profiles: Vec::new(),
             inferred_region: None,
+            localstack_url,
+            ls_cluster: localstack.cluster_id.clone(),
+            ls_engine: localstack.engine_version.clone(),
+            ls_clusters: Vec::new(),
+            ls_discovery: DiscoveryState::Idle,
+            ls_access_key: localstack.access_key.clone(),
+            ls_secret_key: localstack.secret_key.clone(),
             tls: server.tls,
             accept_invalid_certs: server.accept_invalid_certs || neptune.accept_invalid_certs,
             iam_auth: neptune.iam_auth,
@@ -263,6 +312,108 @@ impl ConnectionForm {
             return;
         }
         self.apply_endpoint(parsed, window, cx);
+    }
+
+    /// Switch provider. LocalStack starts from its usual emulated endpoint when the fields hold defaults.
+    pub fn select_kind(
+        &mut self,
+        kind: ProviderKind,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if kind == ProviderKind::NeptuneLocalStack && self.kind != kind {
+            let host = Self::text(&self.host, cx);
+            if host.is_empty() || host == "localhost" {
+                let d = LocalStackConfig::default();
+                self.last_host = d.host.clone();
+                self.host
+                    .update(cx, |s, cx| s.set_value(d.host.clone(), window, cx));
+                self.port
+                    .update(cx, |s, cx| s.set_value(d.port.to_string(), window, cx));
+                self.tls = false;
+            }
+            if Self::text(&self.region, cx).is_empty() {
+                self.region
+                    .update(cx, |s, cx| s.set_value("us-east-1", window, cx));
+            }
+        }
+        self.kind = kind;
+        cx.notify();
+    }
+
+    fn localstack_config(&self, cx: &App) -> LocalStackConfig {
+        LocalStackConfig {
+            localstack_url: match Self::text(&self.localstack_url, cx) {
+                u if u.is_empty() => providers::config::LOCALSTACK_URL.into(),
+                u => u,
+            },
+            region: match Self::text(&self.region, cx) {
+                r if r.is_empty() => "us-east-1".into(),
+                r => r,
+            },
+            cluster_id: self.ls_cluster.clone(),
+            host: Self::text(&self.host, cx),
+            port: Self::text(&self.port, cx).parse().unwrap_or(4510),
+            engine_version: self.ls_engine.clone(),
+            iam_auth: self.iam_auth,
+            access_key: self.ls_access_key.clone(),
+            secret_key: self.ls_secret_key.clone(),
+            tls: self.tls,
+        }
+    }
+
+    /// List LocalStack's Neptune clusters for the picker.
+    pub fn discover_clusters(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let config = self.localstack_config(cx);
+        self.ls_discovery = DiscoveryState::Running;
+        cx.notify();
+        let task = crate::io::spawn_io(cx, async move {
+            providers::neptune::localstack::discover(&config).await
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(Ok(clusters)) => {
+                        this.ls_clusters = clusters;
+                        this.ls_discovery = DiscoveryState::Done;
+                    }
+                    Ok(Err(err)) => {
+                        this.ls_clusters.clear();
+                        this.ls_discovery = DiscoveryState::Failed(err.into());
+                    }
+                    Err(_) => this.ls_discovery = DiscoveryState::Idle,
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Pick a discovered cluster (fills host and port) or `None` for manual entry.
+    pub fn pick_cluster(
+        &mut self,
+        id: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if let Some(cluster) = id
+            .as_ref()
+            .and_then(|id| self.ls_clusters.iter().find(|c| &c.id == id))
+            .cloned()
+        {
+            self.last_host = cluster.endpoint.clone();
+            self.host.update(cx, |s, cx| {
+                s.set_value(cluster.endpoint.clone(), window, cx)
+            });
+            self.port.update(cx, |s, cx| {
+                s.set_value(cluster.port.to_string(), window, cx)
+            });
+            self.ls_engine = Some(cluster.engine_version.clone()).filter(|v| !v.is_empty());
+            self.iam_auth = cluster.iam_auth;
+        }
+        self.ls_cluster = id;
+        cx.notify();
     }
 
     /// Fill the region from a Neptune host name, unless the user typed a region of their own.
@@ -398,6 +549,13 @@ impl ConnectionForm {
                 accept_invalid_certs: self.accept_invalid_certs,
                 tls: true,
             }),
+            ProviderKind::NeptuneLocalStack => {
+                ProviderConfig::NeptuneLocalStack(LocalStackConfig {
+                    host,
+                    port,
+                    ..self.localstack_config(cx)
+                })
+            }
         };
         let config = ConnectionConfig {
             id: self.id,
@@ -486,6 +644,157 @@ impl ConnectionForm {
     }
 }
 
+impl ConnectionForm {
+    fn localstack_section(&self, endpoint_row: Div, cx: &mut Context<'_, Self>) -> Div {
+        let theme = cx.theme().clone();
+        let chip = |id: String,
+                    label: String,
+                    value: Option<String>,
+                    selected: bool,
+                    cx: &mut Context<'_, Self>| {
+            Button::new(SharedString::from(id))
+                .label(label)
+                .small()
+                .when(selected, |b| b.primary())
+                .when(!selected, |b| b.outline())
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.pick_cluster(value.clone(), window, cx)
+                }))
+        };
+        let mut chips = Vec::new();
+        for c in self.ls_clusters.clone() {
+            let selected = self.ls_cluster.as_deref() == Some(c.id.as_str());
+            chips.push(chip(
+                format!("ls-cluster-{}", c.id),
+                format!(
+                    "{} · {} · {}:{}",
+                    c.id, c.engine_version, c.endpoint, c.port
+                ),
+                Some(c.id),
+                selected,
+                cx,
+            ));
+        }
+        // A saved cluster stays selected before (or without) discovery.
+        if let Some(saved) = self
+            .ls_cluster
+            .clone()
+            .filter(|s| !self.ls_clusters.iter().any(|c| &c.id == s))
+        {
+            chips.push(chip(
+                format!("ls-cluster-{saved}"),
+                saved.clone(),
+                Some(saved),
+                true,
+                cx,
+            ));
+        }
+        chips.push(chip(
+            "ls-manual".into(),
+            "Enter host and port".into(),
+            None,
+            self.ls_cluster.is_none(),
+            cx,
+        ));
+        let status = match &self.ls_discovery {
+            DiscoveryState::Idle => None,
+            DiscoveryState::Running => Some(
+                h_flex()
+                    .gap(Tokens::space(2.0))
+                    .text_size(Tokens::text_sm())
+                    .text_color(theme.muted_foreground)
+                    .child(Spinner::new().xsmall())
+                    .child("Asking LocalStack for Neptune clusters…"),
+            ),
+            DiscoveryState::Done => Some(
+                h_flex()
+                    .text_size(Tokens::text_sm())
+                    .text_color(theme.muted_foreground)
+                    .child(format!("{} cluster(s) found.", self.ls_clusters.len())),
+            ),
+            DiscoveryState::Failed(err) => Some(
+                v_flex()
+                    .gap(Tokens::space(0.5))
+                    .text_size(Tokens::text_sm())
+                    .child(div().text_color(theme.danger).child(err.reason.clone()))
+                    .children((!err.suggestion.is_empty()).then(|| {
+                        div()
+                            .text_color(theme.muted_foreground)
+                            .child(err.suggestion.clone())
+                    })),
+            ),
+        };
+        let switch = |id: &'static str,
+                      label: &'static str,
+                      on: bool,
+                      set: fn(&mut ConnectionForm, bool),
+                      cx: &mut Context<'_, Self>| {
+            Switch::new(id)
+                .label(label)
+                .checked(on)
+                .small()
+                .on_click(cx.listener(move |this, checked: &bool, _, cx| {
+                    set(this, *checked);
+                    cx.notify();
+                }))
+        };
+        v_flex()
+            .gap(Tokens::space(3.0))
+            .child(
+                h_flex()
+                    .gap(Tokens::space(3.0))
+                    .items_end()
+                    .child(
+                        field("LocalStack URL", Input::new(&self.localstack_url), None, cx)
+                            .flex_1(),
+                    )
+                    .child(
+                        field("Region", Input::new(&self.region), None, cx).w(Tokens::size(140.0)),
+                    )
+                    .child(
+                        Button::new("ls-discover")
+                            .label("Find clusters")
+                            .outline()
+                            .loading(matches!(self.ls_discovery, DiscoveryState::Running))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.discover_clusters(window, cx)
+                            })),
+                    ),
+            )
+            .children(status)
+            .child(field(
+                "Cluster",
+                h_flex()
+                    .id("ls-clusters")
+                    .test_support()
+                    .flex_wrap()
+                    .gap(Tokens::space(1.0))
+                    .children(chips),
+                None,
+                cx,
+            ))
+            .when(self.ls_cluster.is_none(), |this| this.child(endpoint_row))
+            .child(
+                h_flex()
+                    .gap(Tokens::space(6.0))
+                    .child(switch(
+                        "conn-iam",
+                        "IAM (signs with the test credentials)",
+                        self.iam_auth,
+                        |t, v| t.iam_auth = v,
+                        cx,
+                    ))
+                    .child(switch(
+                        "conn-tls",
+                        "Use TLS (wss://)",
+                        self.tls,
+                        |t, v| t.tls = v,
+                        cx,
+                    )),
+            )
+    }
+}
+
 pub(crate) fn field(
     label: &'static str,
     control: impl IntoElement,
@@ -538,15 +847,27 @@ impl Render for ConnectionForm {
         let theme = cx.theme().clone();
         let gremlin = self.kind == ProviderKind::GremlinServer;
 
-        let provider = segmented(
-            "conn-provider",
-            &[
+        let provider = h_flex().gap(Tokens::space(1.0)).children(
+            [
                 (ProviderKind::GremlinServer, "gremlin", "Gremlin Server"),
                 (ProviderKind::NeptuneAws, "neptune", "Amazon Neptune"),
-            ],
-            self.kind,
-            cx,
-            |this, kind| this.kind = kind,
+                (
+                    ProviderKind::NeptuneLocalStack,
+                    "localstack",
+                    "Neptune on LocalStack",
+                ),
+            ]
+            .into_iter()
+            .map(|(kind, id, label)| {
+                Button::new(SharedString::from(format!("conn-provider-{id}")))
+                    .label(label)
+                    .small()
+                    .when(kind == self.kind, |b| b.primary())
+                    .when(kind != self.kind, |b| b.outline())
+                    .on_click(
+                        cx.listener(move |this, _, window, cx| this.select_kind(kind, window, cx)),
+                    )
+            }),
         );
         let environment = segmented(
             "conn-env",
@@ -620,7 +941,9 @@ impl Render for ConnectionForm {
                 .w(Tokens::size(96.0)),
             );
 
-        let provider_section = if gremlin {
+        let provider_section = if self.kind == ProviderKind::NeptuneLocalStack {
+            self.localstack_section(endpoint_row, cx)
+        } else if gremlin {
             v_flex()
                 .gap(Tokens::space(3.0))
                 .child(endpoint_row)

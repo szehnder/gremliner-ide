@@ -6348,6 +6348,8 @@ dependencies = [
  "hmac 0.12.1",
  "http",
  "log",
+ "providers",
+ "quick-xml",
  "rcgen",
  "reqwest",
  "rustls",

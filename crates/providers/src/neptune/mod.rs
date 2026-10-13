@@ -4,8 +4,10 @@
 
 pub mod aws;
 pub mod compliance;
+pub mod localstack;
 pub mod sign;
 pub mod status;
+pub mod versions;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -30,6 +32,9 @@ pub struct NeptuneProvider {
     files: Option<AwsFiles>,
     /// Set to reuse credentials across connects (and in tests, to supply them).
     credentials: Option<Arc<CredentialCache>>,
+    /// Engine version known without `/status` (LocalStack discovery); maps to a TinkerPop version.
+    engine_hint: Option<String>,
+    kind: ProviderKind,
 }
 
 impl NeptuneProvider {
@@ -39,7 +44,20 @@ impl NeptuneProvider {
             timeout,
             files: None,
             credentials: None,
+            engine_hint: None,
+            kind: ProviderKind::NeptuneAws,
         }
+    }
+
+    /// The engine version when `/status` cannot tell (LocalStack's emulated clusters).
+    pub fn with_engine_hint(mut self, engine: Option<String>) -> Self {
+        self.engine_hint = engine;
+        self
+    }
+
+    pub(crate) fn with_kind(mut self, kind: ProviderKind) -> Self {
+        self.kind = kind;
+        self
     }
 
     pub fn with_files(mut self, files: AwsFiles) -> Self {
@@ -124,13 +142,20 @@ impl NeptuneProvider {
                 None
             }
         };
-        let tinkerpop_version = status.as_ref().and_then(|s| s.tinkerpop_version.clone());
+        let engine_version = status
+            .as_ref()
+            .map(|s| s.engine_version.clone())
+            .or_else(|| self.engine_hint.clone());
+        let tinkerpop_version = status
+            .as_ref()
+            .and_then(|s| s.tinkerpop_version.clone())
+            .or_else(|| engine_version.as_deref().and_then(versions::tinkerpop_for));
         let capabilities = Capabilities::neptune(tinkerpop_version.as_deref(), status.is_some());
         Ok(Session {
             client,
             info: ServerInfo {
                 tinkerpop_version,
-                engine_version: status.as_ref().map(|s| s.engine_version.clone()),
+                engine_version,
                 latency,
             },
             capabilities,
@@ -141,7 +166,7 @@ impl NeptuneProvider {
 
 impl GraphProvider for NeptuneProvider {
     fn kind(&self) -> ProviderKind {
-        ProviderKind::NeptuneAws
+        self.kind
     }
 
     fn connect(&self) -> BoxFuture<'_, Result<Session, ProviderError>> {

@@ -30,14 +30,21 @@ http.workspace = true
 reqwest.workspace = true
 toml.workspace = true
 
+# Test doubles for this crate's and other crates' tests (feature `testing`).
+hmac = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+rcgen = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+quick-xml = { workspace = true }
+
+[features]
+testing = ["dep:hmac", "dep:sha2", "dep:hex", "dep:rcgen", "dep:tokio-rustls", "dep:rustls", "dep:tokio-tungstenite"]
+
 [dev-dependencies]
-hmac.workspace = true
-sha2.workspace = true
-hex.workspace = true
-rcgen.workspace = true
-tokio-rustls.workspace = true
-rustls.workspace = true
-tokio-tungstenite.workspace = true
+providers = { path = ".", features = ["testing"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 gremlin-client = { workspace = true, features = ["testenv"] }
 
