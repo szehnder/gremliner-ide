@@ -45,9 +45,21 @@ impl WorkspacePanel for ResultsPanel {
                         }
                     },
                 ),
-                cx.subscribe(&view, |_, _, event: &ResultsViewEvent, cx| {
-                    if *event == ResultsViewEvent::CancelRequested {
+                cx.subscribe(&view, |_, _, event: &ResultsViewEvent, cx| match event {
+                    ResultsViewEvent::CancelRequested => {
                         Runner::global(cx).update(cx, |r, cx| r.cancel(cx));
+                    }
+                    // A profile step: show where it came from in the tab that ran.
+                    ResultsViewEvent::HighlightSource(range) => {
+                        let Some(tab_id) = Runner::global(cx).read(cx).latest_tab() else {
+                            return;
+                        };
+                        let tabs = crate::panels::EditorTabs::global(cx).read(cx).tabs();
+                        if let Some(tab) = tabs.into_iter().find(|t| t.read(cx).id() == tab_id) {
+                            let editor = tab.read(cx).editor().clone();
+                            let ranges = range.iter().cloned().collect();
+                            editor.update(cx, |e, cx| e.set_hint_ranges(ranges, cx));
+                        }
                     }
                 }),
             ];

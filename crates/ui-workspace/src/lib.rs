@@ -119,6 +119,12 @@ fn register_commands(cx: &mut App) {
         CommandMeta::new("Editor", "Run Query", editor::RunQuery)
             .when(When::EditorOpen)
             .keywords(&["execute"]),
+        CommandMeta::new("Editor", "Profile Query", editor::ProfileQuery)
+            .when(When::EditorOpen)
+            .keywords(&["performance", "timing", "slow"]),
+        CommandMeta::new("Editor", "Explain Query", editor::ExplainQuery)
+            .when(When::EditorOpen)
+            .keywords(&["plan", "strategies"]),
         CommandMeta::new("Editor", "Format Query", editor::FormatQuery).when(When::EditorOpen),
         CommandMeta::new(
             "Assistant",

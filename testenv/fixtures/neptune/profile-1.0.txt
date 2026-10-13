@@ -1,0 +1,60 @@
+*******************************************************
+                Neptune Gremlin Profile
+*******************************************************
+
+Query String
+==================
+g.V().hasLabel('airport').limit(5).values('city')
+
+Original Traversal
+==================
+[GraphStep(vertex,[]), HasStep([~label.eq(airport)]), RangeGlobalStep(0,5), PropertiesStep([city],value)]
+
+Optimized Traversal
+===================
+Neptune steps:
+[
+    NeptuneGraphQueryStep(Vertex) {
+        JoinGroupNode {
+            PatternNode[(?1, <~label>, ?2=<airport>, <~>) . project distinct ?1 .], {estimatedCardinality=3374}
+        }, annotations={path=[Vertex(?1):GraphStep], maxVarId=3}
+    },
+    NeptuneTraverserConverterStep
+]
++ not converted into Neptune steps: [RangeGlobalStep(0,5), PropertiesStep([city],value)]
+
+Physical Pipeline
+=================
+NeptuneGraphQueryStep
+    |-- StartOp
+    |-- JoinGroupOp
+        |-- DynamicJoinOp(PatternNode[(?1, <~label>, ?2=<airport>, <~>) . project distinct ?1 .], {estimatedCardinality=3374})
+
+Runtime (ms)
+============
+Query Execution: 1.523
+
+Traversal Metrics
+=================
+Step                                                               Count  Traversers       Time (ms)    % Dur
+-------------------------------------------------------------------------------------------------------------
+NeptuneGraphQueryStep(Vertex)                                          5           5           0.912    59.88
+NeptuneTraverserConverterStep                                          5           5           0.201    13.20
+RangeGlobalStep(0,5)                                                   5           5           0.205    13.46
+PropertiesStep([city],value)                                           5           5           0.205    13.46
+                                            >TOTAL                     -           -           1.523        -
+
+Predicates
+==========
+# of predicates: 18
+
+Results
+=======
+Count: 5
+Output: [Atlanta, Anchorage, Austin, Nashville, Boston]
+
+Index Operations
+================
+Query execution:
+    # of statement index ops: 6
+    # of terms materialized: 0

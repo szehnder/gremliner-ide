@@ -38,7 +38,9 @@ pub mod graph {
 
 /// Editor commands, declared by `ui-editor` and re-exported for the palette and keymap.
 pub mod editor {
-    pub use ui_editor::actions::{FormatQuery, RunQuery, ToggleLineComment};
+    pub use ui_editor::actions::{
+        ExplainQuery, FormatQuery, ProfileQuery, RunQuery, ToggleLineComment,
+    };
 }
 
 /// Open a new tab bound to `connection` with `query`, and run it (the schema browser's "Sample 25").

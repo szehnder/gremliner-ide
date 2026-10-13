@@ -51,6 +51,11 @@ pub fn bind_default_keys(cx: &mut App) {
         ),
         KeyBinding::new("secondary-enter", editor::RunQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("alt-enter", editor::RunQuery, Some(EDITOR_INPUT)),
+        KeyBinding::new(
+            "secondary-shift-enter",
+            editor::ProfileQuery,
+            Some(EDITOR_INPUT),
+        ),
         KeyBinding::new("shift-alt-f", editor::FormatQuery, Some(EDITOR_INPUT)),
         KeyBinding::new("secondary-/", editor::ToggleLineComment, Some(EDITOR_INPUT)),
         KeyBinding::new("backspace", graph::HideSelection, Some(GRAPH_CANVAS)),

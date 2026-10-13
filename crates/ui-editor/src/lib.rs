@@ -9,5 +9,5 @@ pub mod hover;
 pub mod language;
 mod tokens;
 
-pub use editor::{KEY_CONTEXT, QueryEditor, QueryEditorEvent};
+pub use editor::{KEY_CONTEXT, QueryEditor, QueryEditorEvent, RunMode};
 pub use language::{LANGUAGE_NAME, highlight_styles, register};

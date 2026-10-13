@@ -3,4 +3,13 @@
 
 use gpui_kit::actions;
 
-actions!(editor, [RunQuery, FormatQuery, ToggleLineComment]);
+actions!(
+    editor,
+    [
+        RunQuery,
+        ProfileQuery,
+        ExplainQuery,
+        FormatQuery,
+        ToggleLineComment
+    ]
+);

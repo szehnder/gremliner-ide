@@ -14,9 +14,10 @@ use gpui_kit::*;
 use gremlin_client::{Error as ClientError, Request};
 use gremlin_model::GValue;
 use providers::read_only;
+use ui_editor::RunMode;
 use ui_results::graph_view::{LayoutSettings, MutationRequest};
 use ui_results::{
-    FetchRequest, GraphView, GraphViewEvent, ResultSet, RunError, RunStatus, error_range,
+    Analysis, FetchRequest, GraphView, GraphViewEvent, ResultSet, RunError, RunStatus, error_range,
 };
 use uuid::Uuid;
 
@@ -85,6 +86,11 @@ impl Runner {
 
     pub fn latest(&self) -> Option<&Entity<ResultSet>> {
         self.latest.as_ref()
+    }
+
+    /// The tab that ran last.
+    pub fn latest_tab(&self) -> Option<Uuid> {
+        self.latest_tab
     }
 
     pub fn result_for_tab(&self, tab: Uuid) -> Option<&Entity<ResultSet>> {
@@ -356,6 +362,39 @@ impl Runner {
             );
             return;
         };
+        // Explain plans without executing, so nothing can change.
+        if request.mode == RunMode::Explain {
+            self.execute(request, window, cx);
+            return;
+        }
+        // Profiling executes the traversal: a mutation would really run.
+        if request.mode == RunMode::Profile && gremlin_syntax::is_mutating(&request.text) {
+            let mut description = format!(
+                "Profiling runs the traversal to measure it, so this statement will modify data on “{}”.",
+                config.name
+            );
+            if config.read_only {
+                description.push_str(" The connection is read-only.");
+            }
+            let runner = cx.weak_entity();
+            window.open_alert_dialog(cx, move |alert, _, cx| {
+                let request = request.clone();
+                let runner = runner.clone();
+                alert
+                    .icon(Icon::new(IconName::TriangleAlert).text_color(cx.theme().warning))
+                    .title("Profile a query that changes data?")
+                    .description(description.clone())
+                    .ok_text("Profile and modify data")
+                    .ok_variant(ButtonVariant::Danger)
+                    .show_cancel(true)
+                    .on_ok(move |_, window, cx| {
+                        let request = request.clone();
+                        let _ = runner.update(cx, |runner, cx| runner.execute(request, window, cx));
+                        true
+                    })
+            });
+            return;
+        }
         if let Err(blocked) = read_only::check(&config.name, config.read_only, &request.text, false)
         {
             let message = blocked.to_string();
@@ -399,7 +438,17 @@ impl Runner {
         self.cancel(cx);
         self.next_run += 1;
         let run_id = self.next_run;
-        let sent = gremlin_syntax::ensure_terminal(&request.text);
+        let sent = match request.mode {
+            RunMode::Run => gremlin_syntax::ensure_terminal(&request.text),
+            RunMode::Profile => format!(
+                "{}.profile()",
+                providers::analysis::traversal_part(&request.text)
+            ),
+            RunMode::Explain => format!(
+                "{}.explain()",
+                providers::analysis::traversal_part(&request.text)
+            ),
+        };
         let cap = AppSettings::general(cx).result_limit.max(1);
         let result = cx.new(|_| {
             ResultSet::new(
@@ -429,6 +478,11 @@ impl Runner {
         cx.notify();
 
         let timeout = Duration::from_millis(config.timeout_ms);
+        if request.mode != RunMode::Run {
+            drop(cancel_rx);
+            self.run_analysis(run_id, result, request, connection_id, timeout, window, cx);
+            return;
+        }
         let base = request.range.start;
         let tab_id = request.tab_id;
         let script = request.text.clone();
@@ -519,6 +573,93 @@ impl Runner {
                     let _ = window;
                 }
             });
+        })
+        .detach();
+    }
+
+    /// Profile or explain the statement and attach the report to `result`.
+    fn run_analysis(
+        &mut self,
+        run_id: u64,
+        result: Entity<ResultSet>,
+        request: RunRequest,
+        connection_id: Uuid,
+        timeout: Duration,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let manager = ConnectionManager::global(cx);
+        let mode = request.mode;
+        let script = request.text.clone();
+        let base = request.range.start;
+        cx.spawn_in(window, async move |this, cx| {
+            let fail = |message: String, cx: &mut AsyncWindowContext| {
+                result.update(cx, |r, cx| {
+                    r.finish(
+                        RunStatus::Failed(RunError {
+                            message,
+                            code: None,
+                            exceptions: Vec::new(),
+                            range: None,
+                        }),
+                        cx,
+                    )
+                });
+            };
+            if manager.read_with(cx, |m, _| m.session(connection_id).is_none()) {
+                manager
+                    .update(cx, |m, cx| m.connect(connection_id, cx))
+                    .await;
+            }
+            let session = manager.read_with(cx, |m, _| {
+                (m.session(connection_id).cloned(), m.status(connection_id))
+            });
+            let session = match session {
+                (Some(s), _) => s,
+                (None, status) => {
+                    let message = match status {
+                        ConnStatus::Error(err) => err.reason,
+                        _ => "Not connected.".to_owned(),
+                    };
+                    fail(message, cx);
+                    let _ = this.update(cx, |this, cx| this.clear_running(run_id, cx));
+                    return;
+                }
+            };
+            let text = script.clone();
+            let work = cx.update(|_, cx| {
+                spawn_io(cx, async move {
+                    match mode {
+                        RunMode::Explain => providers::analysis::explain(&session, &text, timeout)
+                            .await
+                            .map(Analysis::Explain),
+                        _ => providers::analysis::profile(&session, &text, timeout)
+                            .await
+                            .map(|report| {
+                                let names: Vec<&str> =
+                                    report.steps.iter().map(|s| s.name.as_str()).collect();
+                                let ranges = gremlin_syntax::profile_match::profile_step_ranges(
+                                    &text, &names,
+                                )
+                                .into_iter()
+                                .map(|r| r.map(|r| base + r.start..base + r.end))
+                                .collect();
+                                Analysis::Profile { report, ranges }
+                            }),
+                    }
+                })
+            });
+            let Ok(work) = work else { return };
+            match work.await {
+                Ok(Ok(analysis)) => result.update(cx, |r, cx| {
+                    if r.is_running() {
+                        r.set_analysis(analysis, cx);
+                    }
+                }),
+                Ok(Err(err)) => fail(err.reason, cx),
+                Err(_) => result.update(cx, |r, cx| r.finish(RunStatus::Cancelled, cx)),
+            }
+            let _ = this.update(cx, |this, cx| this.clear_running(run_id, cx));
         })
         .detach();
     }

@@ -19,7 +19,7 @@ use ui_editor::{QueryEditor, QueryEditorEvent};
 use uuid::Uuid;
 
 use super::{WorkspacePanel, panel_basics};
-use crate::actions::editor::{FormatQuery, RunQuery};
+use crate::actions::editor::{ExplainQuery, FormatQuery, ProfileQuery, RunQuery};
 use crate::connections::ConnectionManager;
 use crate::connections::style::{color_tag_color, environment_badge};
 use crate::settings::AppSettings;
@@ -36,6 +36,8 @@ pub struct RunRequest {
     pub connection_id: Option<Uuid>,
     pub text: String,
     pub range: Range<usize>,
+    /// Run, profile or explain.
+    pub mode: ui_editor::RunMode,
 }
 
 #[derive(Debug, Clone)]
@@ -210,8 +212,8 @@ impl EditorPanel {
                     &editor,
                     |this: &mut Self, _, event: &QueryEditorEvent, cx| match event {
                         QueryEditorEvent::Changed => this.on_changed(cx),
-                        QueryEditorEvent::RunRequested { text, range } => {
-                            this.on_run(text.clone(), range.clone(), cx);
+                        QueryEditorEvent::RunRequested { text, range, mode } => {
+                            this.on_run(text.clone(), range.clone(), *mode, cx);
                         }
                     },
                 ),
@@ -320,12 +322,19 @@ impl EditorPanel {
         self.schedule_save(cx);
     }
 
-    fn on_run(&mut self, text: String, range: Range<usize>, cx: &mut Context<'_, Self>) {
+    fn on_run(
+        &mut self,
+        text: String,
+        range: Range<usize>,
+        mode: ui_editor::RunMode,
+        cx: &mut Context<'_, Self>,
+    ) {
         let request = RunRequest {
             tab_id: self.id,
             connection_id: self.connection_id,
             text,
             range,
+            mode,
         };
         if let Some(id) = self.connection_id {
             ConnectionManager::global(cx).update(cx, |m, cx| m.set_active(Some(id), cx));
@@ -506,6 +515,28 @@ impl Render for EditorPanel {
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.editor
                             .update(cx, |e, cx| e.format(&FormatQuery, window, cx));
+                    })),
+            )
+            .child(
+                Button::new("editor-explain")
+                    .label("Explain")
+                    .ghost()
+                    .xsmall()
+                    .tooltip("Show how the database plans the statement")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.editor
+                            .update(cx, |e, cx| e.explain(&ExplainQuery, window, cx));
+                    })),
+            )
+            .child(
+                Button::new("editor-profile")
+                    .label("Profile")
+                    .ghost()
+                    .xsmall()
+                    .tooltip("Run with profiling (Ctrl+Shift+Enter)")
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.editor
+                            .update(cx, |e, cx| e.profile(&ProfileQuery, window, cx));
                     })),
             )
             .child(

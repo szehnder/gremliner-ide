@@ -6,6 +6,7 @@ mod lang;
 mod layout_bench;
 mod llm_cmd;
 mod nl_cmd;
+mod profile_cmd;
 mod query;
 mod render_bench;
 mod schema_cmd;
@@ -146,6 +147,51 @@ enum Command {
         #[arg(long, default_value_t = 5_000)]
         timeout_ms: u64,
     },
+    /// Profile a statement: per-step counts, times and share of the total (executes it).
+    Profile {
+        /// A saved connection.
+        #[arg(long)]
+        conn: Option<String>,
+        /// Server WebSocket URL, when no `--conn` is given.
+        #[arg(
+            long,
+            env = "GREMLINER_URL",
+            default_value = "ws://localhost:8182/gremlin"
+        )]
+        url: String,
+        /// Server-side traversal source to bind to `g`, when no `--conn` is given.
+        #[arg(long)]
+        alias: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long, default_value_t = 30_000)]
+        timeout_ms: u64,
+        /// Profile even though the statement changes data.
+        #[arg(long)]
+        yes: bool,
+        script: String,
+    },
+    /// Explain a statement: the strategies applied and the final traversal (does not execute it).
+    Explain {
+        /// A saved connection.
+        #[arg(long)]
+        conn: Option<String>,
+        /// Server WebSocket URL, when no `--conn` is given.
+        #[arg(
+            long,
+            env = "GREMLINER_URL",
+            default_value = "ws://localhost:8182/gremlin"
+        )]
+        url: String,
+        /// Server-side traversal source to bind to `g`, when no `--conn` is given.
+        #[arg(long)]
+        alias: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long, default_value_t = 30_000)]
+        timeout_ms: u64,
+        script: String,
+    },
     /// Time a graph layout on a GraphML dataset (default: the testenv's air-routes).
     LayoutBench {
         /// A testenv dataset name (`air-routes`, `synthetic-10000-42`) or a GraphML path.
@@ -272,6 +318,49 @@ fn main() -> anyhow::Result<()> {
                 json,
                 sample,
                 timeout_ms,
+            },
+            cli.data_dir,
+            &runtime,
+        )?,
+        Command::Profile {
+            conn,
+            url,
+            alias,
+            json,
+            timeout_ms,
+            yes,
+            script,
+        } => profile_cmd::run(
+            profile_cmd::Kind::Profile,
+            profile_cmd::Args {
+                conn,
+                url,
+                alias,
+                json,
+                yes,
+                timeout_ms,
+                script,
+            },
+            cli.data_dir,
+            &runtime,
+        )?,
+        Command::Explain {
+            conn,
+            url,
+            alias,
+            json,
+            timeout_ms,
+            script,
+        } => profile_cmd::run(
+            profile_cmd::Kind::Explain,
+            profile_cmd::Args {
+                conn,
+                url,
+                alias,
+                json,
+                yes: false,
+                timeout_ms,
+                script,
             },
             cli.data_dir,
             &runtime,

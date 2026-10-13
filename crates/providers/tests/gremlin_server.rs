@@ -102,3 +102,81 @@ async fn authenticates_and_reports_bad_passwords() {
     let bad = test_connection(&config, Some("wrong-password".into())).await;
     assert_eq!(bad.result.unwrap_err().kind, FailureKind::Auth);
 }
+
+fn modern_session() -> Option<(tokio::runtime::Runtime, providers::Session)> {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let url = gremlin_client::testenv::url();
+    if !gremlin_client::testenv::is_up(&url) {
+        eprintln!("SKIPPED: testenv not reachable at {url}");
+        return None;
+    }
+    let p = providers::endpoint::parse(&url).unwrap();
+    let config = providers::GremlinServerConfig {
+        host: p.host,
+        port: p.port.unwrap_or(8182),
+        alias: "gModern".into(),
+        ..Default::default()
+    };
+    let provider = providers::gremlin_server::GremlinServerProvider::new(
+        config,
+        None,
+        Duration::from_secs(10),
+    );
+    let session = rt
+        .block_on(providers::GraphProvider::connect(&provider))
+        .unwrap();
+    Some((rt, session))
+}
+
+#[test]
+fn scenario_query_profile_explain_profile_on_gremlin_server() {
+    let Some((rt, session)) = modern_session() else {
+        return;
+    };
+    let report = rt
+        .block_on(providers::analysis::profile(
+            &session,
+            "g.V().out().out().path()",
+            Duration::from_secs(10),
+        ))
+        .unwrap();
+    assert!(report.steps.len() >= 3, "{report:?}");
+    assert!(
+        report
+            .steps
+            .iter()
+            .all(|s| s.traversers.is_some() && s.count.is_some())
+    );
+    let sum: f64 = report.steps.iter().map(|s| s.pct).sum();
+    assert!((sum - 100.0).abs() < 1.0, "percentages sum to {sum}");
+    assert!(report.steps.iter().any(|s| s.name.starts_with("PathStep")));
+    // The final step produced the two paths.
+    assert_eq!(report.steps.last().and_then(|s| s.count), Some(2));
+}
+
+#[test]
+fn scenario_query_profile_explain_explain_on_gremlin_server() {
+    let Some((rt, session)) = modern_session() else {
+        return;
+    };
+    let report = rt
+        .block_on(providers::analysis::explain(
+            &session,
+            "g.V().hasLabel('person').count()",
+            Duration::from_secs(10),
+        ))
+        .unwrap();
+    assert!(report.strategies.len() > 3, "{report:?}");
+    assert!(
+        report
+            .strategies
+            .iter()
+            .any(|s| s.category == "optimization")
+    );
+    assert!(report.original.as_deref().unwrap().contains("HasStep"));
+    let last = report.final_traversal.unwrap();
+    assert!(
+        last.contains("CountGlobalStep") || last.contains("Count"),
+        "{last}"
+    );
+}

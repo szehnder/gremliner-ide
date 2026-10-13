@@ -12,6 +12,7 @@ pub mod fast;
 pub mod graphson;
 pub mod normalize;
 pub mod plain;
+pub mod profile;
 
 use std::fmt;
 

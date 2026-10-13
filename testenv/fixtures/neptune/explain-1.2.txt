@@ -1,0 +1,44 @@
+*******************************************************
+                Neptune Gremlin Explain
+*******************************************************
+
+Query String
+============
+g.V().hasLabel('airport').count()
+
+Original Traversal
+==================
+[GraphStep(vertex,[]), HasStep([~label.eq(airport)]), CountGlobalStep]
+
+Converted Traversal
+===================
+Neptune steps:
+[
+    NeptuneCountGlobalStep {
+        JoinGroupNode {
+            PatternNode[(?1, <~label>, ?2=<airport>, <~>) . project distinct ?1 .], {estimatedCardinality=3374}
+        }, annotations={path=[Vertex(?1):GraphStep], maxVarId=3}
+    }
+]
+
+Optimized Traversal
+===================
+Neptune steps:
+[
+    NeptuneCountGlobalStep {
+        JoinGroupNode {
+            PatternNode[(?1, <~label>, ?2=<airport>, <~>) . project distinct ?1 .], {estimatedCardinality=3374}
+        }, annotations={path=[Vertex(?1):GraphStep], maxVarId=3}
+    }
+]
+
+Physical Pipeline
+=================
+NeptuneCountGlobalStep
+    |-- StartOp
+    |-- JoinGroupOp
+        |-- DynamicJoinOp(PatternNode[(?1, <~label>, ?2=<airport>, <~>) . project distinct ?1 .], {estimatedCardinality=3374})
+
+Predicates
+==========
+# of predicates: 18

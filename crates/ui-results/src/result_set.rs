@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::{Context, EventEmitter};
 use gremlin_model::GValue;
 use gremlin_model::normalize::{self, ResultShape};
+use gremlin_model::profile::{ExplainReport, ProfileReport};
 
 /// Raw response text kept for the console's raw mode (beyond this, raw frames are dropped).
 pub const RAW_LIMIT_BYTES: usize = 5 * 1024 * 1024;
@@ -26,6 +27,17 @@ pub enum RunStatus {
     Succeeded,
     Failed(RunError),
     Cancelled,
+}
+
+/// A profile or explain run's report, shown instead of items.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Analysis {
+    /// `ranges[i]`: where top-level step `i` came from in the editor document, when it could be matched.
+    Profile {
+        report: ProfileReport,
+        ranges: Vec<Option<Range<usize>>>,
+    },
+    Explain(ExplainReport),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,6 +65,8 @@ pub struct ResultSet {
     pub elapsed: Option<Duration>,
     /// Server-side execution time, when the server reports it.
     pub server_time: Option<Duration>,
+    /// Profile or explain report (profile and explain runs).
+    pub analysis: Option<Analysis>,
 }
 
 impl EventEmitter<ResultSetEvent> for ResultSet {}
@@ -80,6 +94,7 @@ impl ResultSet {
             started: Instant::now(),
             elapsed: None,
             server_time: None,
+            analysis: None,
         }
     }
 
@@ -90,6 +105,12 @@ impl ResultSet {
         set.status = RunStatus::Succeeded;
         set.elapsed = Some(Duration::ZERO);
         set
+    }
+
+    /// Attach a profile or explain report and finish successfully.
+    pub fn set_analysis(&mut self, analysis: Analysis, cx: &mut Context<'_, Self>) {
+        self.analysis = Some(analysis);
+        self.finish(RunStatus::Succeeded, cx);
     }
 
     pub fn is_running(&self) -> bool {

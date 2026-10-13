@@ -1,6 +1,7 @@
 //! Graph database providers (ADR-0015): saved connection settings, the provider abstraction, the Gremlin
 //! Server and Neptune providers, connection testing, the read-only guard, and the connection store.
 
+pub mod analysis;
 pub mod config;
 pub mod endpoint;
 pub mod error;

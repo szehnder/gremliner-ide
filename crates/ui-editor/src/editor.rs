@@ -18,7 +18,7 @@ use gremlin_syntax::dialect::{Restrictions, restriction_issues};
 use gremlin_syntax::{Diagnostic, Document, Severity, line_col};
 use schema::Schema;
 
-use crate::actions::{FormatQuery, RunQuery, ToggleLineComment};
+use crate::actions::{ExplainQuery, FormatQuery, ProfileQuery, RunQuery, ToggleLineComment};
 use crate::completion::{
     GremlinCompletions, SchemaFixes, SharedState, apply_replacement, fixes_at,
 };
@@ -30,7 +30,11 @@ use crate::{comment, tokens};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryEditorEvent {
     /// Run `text` (the statement at the cursor, or the selection), found at `range` in the document.
-    RunRequested { text: String, range: Range<usize> },
+    RunRequested {
+        text: String,
+        range: Range<usize>,
+        mode: RunMode,
+    },
     /// The text changed (for dirty markers and persistence).
     Changed,
 }
@@ -40,6 +44,17 @@ pub const KEY_CONTEXT: &str = "QueryEditor";
 
 /// Documents larger than this are analysed on a background thread after each edit.
 const BACKGROUND_ANALYSIS_BYTES: usize = 64 * 1024;
+
+/// What a run request asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RunMode {
+    #[default]
+    Run,
+    /// Execute with profiling and show where the time went.
+    Profile,
+    /// Show the plan without executing.
+    Explain,
+}
 
 pub struct QueryEditor {
     state: Entity<EditorState>,
@@ -458,8 +473,21 @@ impl QueryEditor {
     }
 
     pub fn run(&mut self, _: &RunQuery, _: &mut Window, cx: &mut Context<'_, Self>) {
+        self.request_run(RunMode::Run, cx);
+    }
+
+    pub fn profile(&mut self, _: &ProfileQuery, _: &mut Window, cx: &mut Context<'_, Self>) {
+        self.request_run(RunMode::Profile, cx);
+    }
+
+    pub fn explain(&mut self, _: &ExplainQuery, _: &mut Window, cx: &mut Context<'_, Self>) {
+        self.request_run(RunMode::Explain, cx);
+    }
+
+    /// Ask to run, profile or explain the selection or the statement at the cursor.
+    pub fn request_run(&mut self, mode: RunMode, cx: &mut Context<'_, Self>) {
         if let Some((text, range)) = self.run_target(cx) {
-            cx.emit(QueryEditorEvent::RunRequested { text, range });
+            cx.emit(QueryEditorEvent::RunRequested { text, range, mode });
         }
     }
 
@@ -659,6 +687,8 @@ impl Render for QueryEditor {
             .key_context(KEY_CONTEXT)
             .size_full()
             .on_action(cx.listener(Self::run))
+            .on_action(cx.listener(Self::profile))
+            .on_action(cx.listener(Self::explain))
             .on_action(cx.listener(Self::format))
             .on_action(cx.listener(Self::toggle_comment))
             .child(

@@ -459,3 +459,40 @@ fn scenario_nl_to_gremlin_golden_set_evaluation() {
     eprintln!("{stdout}");
     assert!(out.status.success(), "golden set below 90%");
 }
+
+#[test]
+fn scenario_query_profile_explain_cli_profile_json() {
+    if !testenv_up() {
+        eprintln!("SKIPPED: testenv not reachable");
+        return;
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_gremliner-cli"))
+        .args([
+            "profile",
+            "--alias",
+            "gModern",
+            "--json",
+            "g.V().out().out().path()",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("valid JSON on stdout");
+    let steps = v["steps"].as_array().expect("a list of steps");
+    assert!(steps.len() >= 3);
+    for s in steps {
+        assert!(s["count"].is_i64() && s["traversers"].is_i64(), "{s}");
+        assert!(s["dur_ms"].as_f64().is_some(), "{s}");
+    }
+    assert!(v["total_ms"].as_f64().unwrap() > 0.0);
+    // Profiling a mutation is refused without --yes.
+    let refused = Command::new(env!("CARGO_BIN_EXE_gremliner-cli"))
+        .args(["profile", "--alias", "gModern", "g.V().drop()"])
+        .output()
+        .unwrap();
+    assert_eq!(refused.status.code(), Some(2));
+}

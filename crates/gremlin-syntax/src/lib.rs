@@ -8,6 +8,7 @@ pub mod dialect;
 pub mod document;
 pub mod format;
 pub mod language;
+pub mod profile_match;
 
 pub use catalogue::{Catalogue, StepInfo, StepKind, documentation};
 pub use document::{

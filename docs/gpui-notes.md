@@ -200,3 +200,14 @@ Programmatic edits followed by `run()` in the same update see the old document, 
 
 A `flex_1` text child without `min_w_0()` will not shrink, so it pushes siblings (buttons) beyond the
 panel, where clicks land on whatever is drawn there.
+
+## Headless tests: what you can and cannot inspect
+
+`TestWindowExt` (`find`, `try_find`, `within`, `click`, `input`, ...) sees element ids, not rendered
+text. To check a message, give its element an id, or assert on the model behind it. A component that
+only shows inside a dock panel after app state changes (the results panel waits for a run) is easier to
+test in its own window: `gpui_kit::open_window(.., |_, cx| cx.new(|_| View::new()))`, then
+`VisualTestContext::from_window`.
+
+Typing with `window.input(c)` inserts at the cursor. A field with a default value (the host field's
+`localhost`) needs `set_value("")` first, or the typed text is prepended to it.

@@ -11,8 +11,11 @@ use gremlin_model::normalize::PreferredView;
 use ui_theme::Tokens;
 
 use crate::console_view::ConsoleView;
+use crate::explain_view::ExplainView;
 use crate::graph_view::{GraphView, GraphViewEvent};
 use crate::json_view::JsonView;
+use crate::profile_view::{ProfileView, ProfileViewEvent};
+use crate::result_set::Analysis;
 use crate::result_set::{ResultSet, RunStatus};
 use crate::table_view::TableView;
 
@@ -25,6 +28,8 @@ pub enum ViewKind {
     Table,
     Json,
     Console,
+    Profile,
+    Explain,
 }
 
 impl From<PreferredView> for ViewKind {
@@ -38,9 +43,11 @@ impl From<PreferredView> for ViewKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResultsViewEvent {
     CancelRequested,
+    /// A profile step was selected: highlight this range of the editor document (`None`: clear).
+    HighlightSource(Option<std::ops::Range<usize>>),
 }
 
 pub struct ResultsView {
@@ -51,6 +58,11 @@ pub struct ResultsView {
     table: Option<Entity<TableView>>,
     json: Option<Entity<JsonView>>,
     console: Option<Entity<ConsoleView>>,
+    profile: Option<Entity<ProfileView>>,
+    explain: Option<Entity<ExplainView>>,
+    /// Run the analysis views were built for.
+    analysis_for: Option<u64>,
+    _profile_subscription: Option<Subscription>,
     /// The tab's graph (kept across runs so results can accumulate).
     graph: Option<Entity<GraphView>>,
     _graph_subscription: Option<Subscription>,
@@ -74,6 +86,10 @@ impl Default for ResultsView {
             table: None,
             json: None,
             console: None,
+            profile: None,
+            explain: None,
+            analysis_for: None,
+            _profile_subscription: None,
             graph: None,
             _graph_subscription: None,
             built_for: None,
@@ -108,6 +124,14 @@ impl ResultsView {
 
     pub fn console(&self) -> Option<&Entity<ConsoleView>> {
         self.console.as_ref()
+    }
+
+    pub fn profile(&self) -> Option<&Entity<ProfileView>> {
+        self.profile.as_ref()
+    }
+
+    pub fn explain(&self) -> Option<&Entity<ExplainView>> {
+        self.explain.as_ref()
     }
 
     pub fn graph(&self) -> Option<&Entity<GraphView>> {
@@ -161,6 +185,10 @@ impl ResultsView {
         self.table = None;
         self.json = None;
         self.console = None;
+        self.profile = None;
+        self.explain = None;
+        self.analysis_for = None;
+        self._profile_subscription = None;
         self.built_for = None;
         self.last_refresh = None;
         self.pending_refresh = None;
@@ -215,6 +243,31 @@ impl ResultsView {
             let r = result.read(cx);
             (r.run_id, r.items.len(), r.shape(), !r.is_running())
         };
+        // Profile and explain runs show their report.
+        let analysis = result.read(cx).analysis.clone();
+        if let Some(analysis) = analysis {
+            if self.analysis_for != Some(run_id) {
+                self.analysis_for = Some(run_id);
+                match analysis {
+                    Analysis::Profile { report, ranges } => {
+                        let view = cx.new(|_| ProfileView::new(report, ranges));
+                        self._profile_subscription =
+                            Some(cx.subscribe(&view, |_, _, event: &ProfileViewEvent, cx| {
+                                let ProfileViewEvent::StepSelected(range) = event;
+                                cx.emit(ResultsViewEvent::HighlightSource(range.clone()));
+                            }));
+                        self.profile = Some(view);
+                        self.view = ViewKind::Profile;
+                    }
+                    Analysis::Explain(report) => {
+                        self.explain = Some(cx.new(|_| ExplainView::new(report)));
+                        self.view = ViewKind::Explain;
+                    }
+                }
+            }
+            cx.notify();
+            return;
+        }
         if !self.view_pinned && count > 0 {
             self.view = shape.preferred_view().into();
         }
@@ -268,6 +321,8 @@ impl ResultsView {
                     self.console = Some(cx.new(|cx| ConsoleView::new(&items, &raw, window, cx)))
                 }
             },
+            // Only analysis runs have these; their views are built above.
+            ViewKind::Profile | ViewKind::Explain => {}
         }
         result.update(cx, |r, _| {
             r.items = items;
@@ -376,34 +431,54 @@ impl ResultsView {
                 )
             })
             .child(div().flex_1())
-            .child(view_button(
-                "view-graph",
-                "Graph",
-                ViewKind::Graph,
-                self.view,
-                cx,
-            ))
-            .child(view_button(
-                "view-table",
-                "Table",
-                ViewKind::Table,
-                self.view,
-                cx,
-            ))
-            .child(view_button(
-                "view-json",
-                "JSON",
-                ViewKind::Json,
-                self.view,
-                cx,
-            ))
-            .child(view_button(
-                "view-console",
-                "Console",
-                ViewKind::Console,
-                self.view,
-                cx,
-            ))
+            .when(self.profile.is_some(), |el| {
+                el.child(view_button(
+                    "view-profile",
+                    "Profile",
+                    ViewKind::Profile,
+                    self.view,
+                    cx,
+                ))
+            })
+            .when(self.explain.is_some(), |el| {
+                el.child(view_button(
+                    "view-explain",
+                    "Explain",
+                    ViewKind::Explain,
+                    self.view,
+                    cx,
+                ))
+            })
+            .when(self.analysis_for.is_none(), |el| {
+                el.child(view_button(
+                    "view-graph",
+                    "Graph",
+                    ViewKind::Graph,
+                    self.view,
+                    cx,
+                ))
+                .child(view_button(
+                    "view-table",
+                    "Table",
+                    ViewKind::Table,
+                    self.view,
+                    cx,
+                ))
+                .child(view_button(
+                    "view-json",
+                    "JSON",
+                    ViewKind::Json,
+                    self.view,
+                    cx,
+                ))
+                .child(view_button(
+                    "view-console",
+                    "Console",
+                    ViewKind::Console,
+                    self.view,
+                    cx,
+                ))
+            })
             .into_any_element()
     }
 
@@ -482,6 +557,8 @@ impl Render for ResultsView {
                 ViewKind::Table => self.table.clone().map(|t| t.into_any_element()),
                 ViewKind::Json => self.json.clone().map(|j| j.into_any_element()),
                 ViewKind::Console => self.console.clone().map(|c| c.into_any_element()),
+                ViewKind::Profile => self.profile.clone().map(|p| p.into_any_element()),
+                ViewKind::Explain => self.explain.clone().map(|e| e.into_any_element()),
             }
             .unwrap_or_else(|| div().into_any_element())
         };
