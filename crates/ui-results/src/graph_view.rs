@@ -1217,6 +1217,7 @@ impl GraphView {
             )
             .child(self.render_layout_picker(cx))
             .child(self.render_style_picker(cx))
+            .child(self.render_export_menu(cx))
             .child(if running {
                 Button::new("graph-layout-stop")
                     .icon(Icon::new(IconName::CircleX))
@@ -1797,6 +1798,304 @@ fn context_menu(
         .menu("Select all", Box::new(SelectAll))
         .menu("Unhide all", Box::new(UnhideAll))
         .menu("Fit to view", Box::new(FitGraph))
+}
+
+/// What the Export menu writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExportKind {
+    Png {
+        scale: u8,
+        visible_only: bool,
+        transparent: bool,
+    },
+    Svg {
+        visible_only: bool,
+    },
+    GraphMl,
+    GraphSon,
+}
+
+impl ExportKind {
+    fn extension(self) -> &'static str {
+        match self {
+            ExportKind::Png { .. } => "png",
+            ExportKind::Svg { .. } => "svg",
+            ExportKind::GraphMl => "graphml",
+            ExportKind::GraphSon => "json",
+        }
+    }
+}
+
+fn to_rgb8(c: Hsla) -> [u8; 3] {
+    let c = Rgba::from(c);
+    let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    [b(c.r), b(c.g), b(c.b)]
+}
+
+fn prop_to_gvalue(v: &graph_store::PropValue) -> GValue {
+    match v {
+        graph_store::PropValue::Bool(b) => GValue::Bool(*b),
+        graph_store::PropValue::Num(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => {
+            GValue::Int64(*n as i64)
+        }
+        graph_store::PropValue::Num(n) => GValue::Double(*n),
+        graph_store::PropValue::Text(t) => GValue::String(t.to_string()),
+    }
+}
+
+impl GraphView {
+    /// Theme colours for image export.
+    pub fn export_style(&self, transparent: bool, cx: &App) -> graph_store::export::ExportStyle {
+        let style = self.canvas.read(cx).style();
+        graph_store::export::ExportStyle {
+            palette: style.palette.iter().map(|c| to_rgb8(*c)).collect(),
+            edge: to_rgb8(style.edge),
+            text: to_rgb8(style.label),
+            background: (!transparent).then(|| to_rgb8(style.background)),
+            font_family: ui_theme::fonts::UI_FONT_FAMILY.to_owned(),
+        }
+    }
+
+    /// The graph (or the visible area) as SVG, in the current layout and styles.
+    pub fn export_svg(&self, visible_only: bool, transparent: bool, cx: &App) -> String {
+        let canvas = self.canvas.read(cx);
+        let area = if visible_only {
+            let (min, max) = canvas.visible_world_rect();
+            graph_store::export::Area::Rect { min, max }
+        } else {
+            graph_store::export::Area::Whole
+        };
+        graph_store::export::svg(
+            canvas.store(),
+            canvas.looks(),
+            &self.export_style(transparent, cx),
+            area,
+        )
+    }
+
+    /// The graph's elements (all, or only the selected ones) with their original ids.
+    pub fn element_set(&self, selected_only: bool, cx: &App) -> ElementSet {
+        let g = self.store(cx);
+        let id_of = |ext: &ExtId| {
+            self.ids.get(ext).cloned().unwrap_or_else(|| match ext {
+                ExtId::Int(i) => GValue::Int64(*i),
+                ExtId::Str(s) => GValue::String(s.to_string()),
+            })
+        };
+        let mut set = ElementSet::default();
+        let mut taken = HashSet::new();
+        for i in 0..g.node_count() {
+            let n = NodeIx(i as u32);
+            if g.has_flag(n, flags::HIDDEN) || (selected_only && !g.has_flag(n, flags::SELECTED)) {
+                continue;
+            }
+            taken.insert(n);
+            let mut properties = gremlin_model::IndexMap::default();
+            for (k, v) in g.node_props(n) {
+                properties.insert(
+                    k.to_string(),
+                    vec![gremlin_model::VertexProperty {
+                        id: Box::new(GValue::Null),
+                        label: k.to_string(),
+                        value: Box::new(prop_to_gvalue(v)),
+                        properties: gremlin_model::IndexMap::default(),
+                    }],
+                );
+            }
+            set.vertices.push(gremlin_model::Vertex {
+                id: Box::new(id_of(g.node_ext(n))),
+                label: g.vertex_label_name(g.node_label(n)).to_owned(),
+                properties,
+            });
+        }
+        if selected_only {
+            return set;
+        }
+        let (sources, targets) = g.edge_endpoints();
+        for e in 0..g.edge_count() {
+            let (a, b) = (sources[e], targets[e]);
+            if !taken.contains(&a) || !taken.contains(&b) {
+                continue;
+            }
+            let ix = graph_store::EdgeIx(e as u32);
+            let mut properties = gremlin_model::IndexMap::default();
+            for (k, v) in g.edge_props(ix) {
+                properties.insert(
+                    k.to_string(),
+                    gremlin_model::Property {
+                        key: k.to_string(),
+                        value: Box::new(prop_to_gvalue(v)),
+                    },
+                );
+            }
+            set.edges.push(gremlin_model::Edge {
+                id: Box::new(id_of(g.edge_ext(ix))),
+                label: g.edge_label_name(g.edge_label(ix)).to_owned(),
+                out_v: Box::new(id_of(g.node_ext(a))),
+                out_v_label: g.vertex_label_name(g.node_label(a)).to_owned(),
+                in_v: Box::new(id_of(g.node_ext(b))),
+                in_v_label: g.vertex_label_name(g.node_label(b)).to_owned(),
+                properties,
+            });
+        }
+        set
+    }
+
+    /// The bytes an export writes.
+    pub fn export_bytes(&self, kind: ExportKind, cx: &App) -> Result<Vec<u8>, String> {
+        match kind {
+            ExportKind::Svg { visible_only } => {
+                Ok(self.export_svg(visible_only, false, cx).into_bytes())
+            }
+            ExportKind::Png {
+                scale,
+                visible_only,
+                transparent,
+            } => graph_store::export::png(
+                &self.export_svg(visible_only, transparent, cx),
+                f32::from(scale),
+            ),
+            ExportKind::GraphMl => {
+                Ok(gremlin_model::export::graphml(&self.element_set(false, cx)).into_bytes())
+            }
+            ExportKind::GraphSon => {
+                Ok(gremlin_model::export::graphson(&self.element_set(false, cx)).into_bytes())
+            }
+        }
+    }
+
+    /// Ask for a file and export there.
+    pub fn export_to_file(&mut self, kind: ExportKind, cx: &mut Context<'_, Self>) {
+        let bytes = match kind {
+            // Rasterising can take a moment on large graphs: build the SVG now, render in the background.
+            ExportKind::Png {
+                scale,
+                visible_only,
+                transparent,
+            } => {
+                let svg = self.export_svg(visible_only, transparent, cx);
+                Err((svg, scale))
+            }
+            other => Ok(self.export_bytes(other, cx)),
+        };
+        let file = format!("graph.{}", kind.extension());
+        let dir = std::env::current_dir().unwrap_or_default();
+        let prompt = cx.prompt_for_new_path(&dir, Some(&file));
+        cx.background_spawn(async move {
+            let Ok(Ok(Some(path))) = prompt.await else {
+                return;
+            };
+            let bytes = match bytes {
+                Ok(b) => b,
+                Err((svg, scale)) => graph_store::export::png(&svg, f32::from(scale)),
+            };
+            match bytes {
+                Ok(b) => {
+                    if let Err(err) = std::fs::write(&path, b) {
+                        log::warn!("export to {} failed: {err}", path.display());
+                    }
+                }
+                Err(err) => log::warn!("export failed: {err}"),
+            }
+        })
+        .detach();
+    }
+
+    /// Copy the selected vertices as a JSON array.
+    pub fn copy_selection_json(&mut self, cx: &mut Context<'_, Self>) -> usize {
+        let set = self.element_set(true, cx);
+        let n = set.vertices.len();
+        if n > 0 {
+            cx.write_to_clipboard(ClipboardItem::new_string(
+                gremlin_model::export::elements_json(&set),
+            ));
+        }
+        n
+    }
+
+    /// Copy the graph as a PNG image (2×).
+    pub fn copy_image(&mut self, cx: &mut Context<'_, Self>) {
+        match graph_store::export::png(&self.export_svg(false, false, cx), 2.0) {
+            Ok(bytes) => cx.write_to_clipboard(ClipboardItem::new_image(&Image::from_bytes(
+                ImageFormat::Png,
+                bytes,
+            ))),
+            Err(err) => log::warn!("copy image failed: {err}"),
+        }
+    }
+
+    fn render_export_menu(&self, cx: &mut Context<'_, Self>) -> impl IntoElement + use<> {
+        let view = cx.entity().downgrade();
+        Button::new("graph-export")
+            .icon(Icon::new(IconName::ExternalLink))
+            .ghost()
+            .xsmall()
+            .tooltip("Export or copy")
+            .dropdown_menu(move |mut menu, _, _| {
+                let file = |label: &'static str, kind: ExportKind, view: WeakEntity<GraphView>| {
+                    PopupMenuItem::new(label).on_click(move |_, _, cx| {
+                        let _ = view.update(cx, |v, cx| v.export_to_file(kind, cx));
+                    })
+                };
+                for (label, scale) in [("PNG (1×)…", 1), ("PNG (2×)…", 2), ("PNG (4×)…", 4)]
+                {
+                    menu = menu.item(file(
+                        label,
+                        ExportKind::Png {
+                            scale,
+                            visible_only: false,
+                            transparent: false,
+                        },
+                        view.clone(),
+                    ));
+                }
+                menu = menu
+                    .item(file(
+                        "PNG, transparent (2×)…",
+                        ExportKind::Png {
+                            scale: 2,
+                            visible_only: false,
+                            transparent: true,
+                        },
+                        view.clone(),
+                    ))
+                    .item(file(
+                        "PNG, visible area (2×)…",
+                        ExportKind::Png {
+                            scale: 2,
+                            visible_only: true,
+                            transparent: false,
+                        },
+                        view.clone(),
+                    ))
+                    .item(file(
+                        "SVG…",
+                        ExportKind::Svg {
+                            visible_only: false,
+                        },
+                        view.clone(),
+                    ))
+                    .item(file(
+                        "SVG, visible area…",
+                        ExportKind::Svg { visible_only: true },
+                        view.clone(),
+                    ))
+                    .separator()
+                    .item(file("GraphML…", ExportKind::GraphMl, view.clone()))
+                    .item(file("GraphSON…", ExportKind::GraphSon, view.clone()))
+                    .separator();
+                let v = view.clone();
+                menu = menu.item(PopupMenuItem::new("Copy image").on_click(move |_, _, cx| {
+                    let _ = v.update(cx, |v, cx| v.copy_image(cx));
+                }));
+                let v = view.clone();
+                menu.item(
+                    PopupMenuItem::new("Copy selection as JSON").on_click(move |_, _, cx| {
+                        let _ = v.update(cx, |v, cx| v.copy_selection_json(cx));
+                    }),
+                )
+            })
+    }
 }
 
 impl Render for GraphView {

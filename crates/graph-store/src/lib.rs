@@ -1,6 +1,7 @@
 //! In-memory graph store for visualisation, in struct-of-arrays form with dense `u32` indices (ADR-0008),
 //! plus the pure view geometry ([`view`]) the canvas and the headless render benchmark share.
 
+pub mod export;
 pub mod merge;
 pub mod style;
 pub mod synth;

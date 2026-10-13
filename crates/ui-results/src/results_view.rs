@@ -3,6 +3,7 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -349,6 +350,39 @@ impl ResultsView {
         cx.notify();
     }
 
+    /// The current results in `format`: `csv`, `json` (a JSON array) or `jsonl` (one value per line).
+    pub fn export_text(&self, format: &str, cx: &App) -> Option<String> {
+        let r = self.result.as_ref()?.read(cx);
+        Some(match format {
+            "csv" => {
+                let model = gremlin_model::normalize::table(&r.items);
+                let group = model.groups.first()?;
+                gremlin_model::normalize::to_csv(group, &(0..group.rows.len()).collect::<Vec<_>>())
+            }
+            "jsonl" => gremlin_model::export::json_lines(&r.items),
+            _ => serde_json::to_string_pretty(&serde_json::Value::Array(
+                r.items.iter().map(gremlin_model::plain::to_json).collect(),
+            ))
+            .ok()?,
+        })
+    }
+
+    fn export_results(&self, format: &'static str, cx: &mut Context<'_, Self>) {
+        let Some(text) = self.export_text(format, cx) else {
+            return;
+        };
+        let dir = std::env::current_dir().unwrap_or_default();
+        let prompt = cx.prompt_for_new_path(&dir, Some(&format!("results.{format}")));
+        cx.background_spawn(async move {
+            if let Ok(Ok(Some(path))) = prompt.await
+                && let Err(err) = std::fs::write(&path, text)
+            {
+                log::warn!("export to {} failed: {err}", path.display());
+            }
+        })
+        .detach();
+    }
+
     fn render_summary(&self, cx: &mut Context<'_, Self>) -> AnyElement {
         let theme = cx.theme().clone();
         let Some(result) = self.result.as_ref() else {
@@ -448,6 +482,30 @@ impl ResultsView {
                 )
             })
             .child(div().flex_1())
+            .when(!running && count > 0 && self.analysis_for.is_none(), |el| {
+                let view = cx.entity().downgrade();
+                el.child(
+                    Button::new("results-export")
+                        .label("Export")
+                        .icon(IconName::ChevronDown)
+                        .ghost()
+                        .xsmall()
+                        .dropdown_menu(move |mut menu, _, _| {
+                            for (label, format) in
+                                [("CSV…", "csv"), ("JSON…", "json"), ("JSON Lines…", "jsonl")]
+                            {
+                                let view = view.clone();
+                                menu = menu.item(PopupMenuItem::new(label).on_click(
+                                    move |_, _, cx| {
+                                        let _ =
+                                            view.update(cx, |v, cx| v.export_results(format, cx));
+                                    },
+                                ));
+                            }
+                            menu
+                        }),
+                )
+            })
             .when(self.profile.is_some(), |el| {
                 el.child(view_button(
                     "view-profile",

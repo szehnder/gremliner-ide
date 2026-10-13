@@ -453,6 +453,17 @@ impl GraphCanvas {
         self.stats.clear();
     }
 
+    /// The world rectangle the canvas shows (top-left, bottom-right).
+    pub fn visible_world_rect(&self) -> ([f32; 2], [f32; 2]) {
+        let vp = self.viewport();
+        let a = self.camera.screen_to_world([0.0, 0.0], vp);
+        let b = self.camera.screen_to_world(vp, vp);
+        (
+            [a[0].min(b[0]), a[1].min(b[1])],
+            [a[0].max(b[0]), a[1].max(b[1])],
+        )
+    }
+
     fn viewport(&self) -> Vec2 {
         [
             f32::from(self.bounds.size.width),

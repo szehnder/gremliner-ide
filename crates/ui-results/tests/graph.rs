@@ -520,3 +520,86 @@ fn editing_a_label_style_in_the_panel_applies_live(cx: &mut TestAppContext) {
         "marko"
     );
 }
+
+#[gpui_kit::test]
+fn scenario_export_copy_selection_as_json(cx: &mut TestAppContext) {
+    let (view, mut cx) = mount(cx);
+    ingest(&view, modern(), &mut cx);
+    let copied = cx.update(|_, cx| {
+        view.update(cx, |v, cx| {
+            v.canvas().update(cx, |c, _| {
+                let g = c.store_mut();
+                for i in [1, 4] {
+                    let n = g.node_by_ext(&ExtId::Int(i)).unwrap();
+                    g.set_flag(n, flags::SELECTED, true);
+                }
+            });
+            v.copy_selection_json(cx)
+        })
+    });
+    assert_eq!(copied, 2);
+    let text = cx
+        .update(|_, cx| cx.read_from_clipboard().and_then(|c| c.text()))
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let names: Vec<&str> = json
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| {
+            v["properties"]["name"][0]
+                .as_str()
+                .or(v["properties"]["name"].as_str())
+                .unwrap_or_default()
+        })
+        .collect();
+    assert_eq!(json.as_array().unwrap().len(), 2, "{text}");
+    assert!(
+        names.contains(&"marko") && names.contains(&"josh"),
+        "{text}"
+    );
+}
+
+#[gpui_kit::test]
+fn export_menu_writes_every_format(cx: &mut TestAppContext) {
+    use ui_results::graph_view::ExportKind;
+    let (view, mut cx) = mount(cx);
+    ingest(&view, modern(), &mut cx);
+    let shown = cx.update(|window, cx| {
+        window.render_frame(cx);
+        window.try_find("graph-export").is_some()
+    });
+    assert!(shown, "the Export menu is in the graph toolbar");
+    let (svg, png, graphml, graphson) = cx.update(|_, cx| {
+        let v = view.read(cx);
+        (
+            v.export_bytes(
+                ExportKind::Svg {
+                    visible_only: false,
+                },
+                cx,
+            )
+            .unwrap(),
+            v.export_bytes(
+                ExportKind::Png {
+                    scale: 2,
+                    visible_only: false,
+                    transparent: true,
+                },
+                cx,
+            )
+            .unwrap(),
+            v.export_bytes(ExportKind::GraphMl, cx).unwrap(),
+            v.export_bytes(ExportKind::GraphSon, cx).unwrap(),
+        )
+    });
+    let svg = String::from_utf8(svg).unwrap();
+    assert_eq!(svg.matches(r#"class="node""#).count(), 6);
+    assert_eq!(&png[1..4], b"PNG");
+    let graphml = String::from_utf8(graphml).unwrap();
+    assert_eq!(graphml.matches("<node ").count(), 6);
+    assert_eq!(graphml.matches("<edge ").count(), 6);
+    assert!(graphml.contains(r#"<data key="name">marko</data>"#));
+    let graphson: serde_json::Value = serde_json::from_slice(&graphson).unwrap();
+    assert_eq!(graphson["vertices"].as_array().unwrap().len(), 6);
+}

@@ -8,6 +8,7 @@
 pub mod console;
 pub mod edits;
 pub mod elements;
+pub mod export;
 pub mod fast;
 pub mod graphson;
 pub mod normalize;

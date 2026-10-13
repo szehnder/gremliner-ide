@@ -92,6 +92,8 @@ rustc-hash = "2"
 nucleo-matcher = "0.3"
 url = "2"
 quick-xml = "0.41"
+# Same build GPUI uses for SVG icons; renders exported graphs to PNG (ADR-0038).
+resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging", "tls12"] }
 
 [workspace.lints.rust]
