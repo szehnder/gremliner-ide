@@ -208,6 +208,11 @@ pub enum GraphViewEvent {
     LayoutChanged(LayoutSettings),
     /// The user confirmed a data change; run it and answer with [`GraphView::apply_mutation`].
     Mutate(edit::MutationRequest),
+    /// "Search path from here": open the graph explorer starting at this vertex.
+    SearchPathFrom {
+        id: GValue,
+        name: String,
+    },
 }
 
 /// Counts for the status text.
@@ -752,6 +757,19 @@ impl GraphView {
         let ext = ext_id(id);
         self.ids.entry(ext.clone()).or_insert_with(|| id.clone());
         ext
+    }
+
+    /// Ask to open the graph explorer starting at node `n` (its id with its original type).
+    pub fn search_path_from(&mut self, n: NodeIx, cx: &mut Context<'_, Self>) {
+        let (ext, name) = {
+            let g = self.canvas.read(cx).store();
+            (g.node_ext(n).clone(), g.caption(n).to_string())
+        };
+        let id = self.ids.get(&ext).cloned().unwrap_or_else(|| match &ext {
+            ExtId::Int(i) => GValue::Int64(*i),
+            ExtId::Str(s) => GValue::String(s.to_string()),
+        });
+        cx.emit(GraphViewEvent::SearchPathFrom { id, name });
     }
 
     fn literal(&self, id: &ExtId) -> Option<String> {
@@ -1756,6 +1774,12 @@ fn context_menu(
                         let id = v.read(cx).store(cx).node_ext(n).to_string();
                         cx.write_to_clipboard(ClipboardItem::new_string(id));
                     }
+                })
+            })
+            .item({
+                let view = view.clone();
+                PopupMenuItem::new("Search path from here").on_click(move |_, _, cx| {
+                    let _ = view.update(cx, |v, cx| v.search_path_from(n, cx));
                 })
             })
             .item({

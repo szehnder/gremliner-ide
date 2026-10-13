@@ -18,8 +18,8 @@ use crate::actions::*;
 use crate::connections::ConnectionManager;
 use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
 use crate::panels::{
-    AssistantPanel, ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, InspectorPanel,
-    ResultsPanel, SchemaGraphPanel, SettingsPanel, WelcomePanel, WorkspacePanel,
+    AssistantPanel, ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, ExplorerPanel,
+    InspectorPanel, ResultsPanel, SchemaGraphPanel, SettingsPanel, WelcomePanel, WorkspacePanel,
     confirm_reset_general,
 };
 use crate::perf_hud::PerfHud;
@@ -461,6 +461,51 @@ impl Workspace {
         Some(panel)
     }
 
+    /// Open a graph explorer tab on `connection` (default: the active one), optionally starting from a
+    /// fixed vertex `(id, name)`.
+    pub fn open_explorer(
+        &mut self,
+        connection: Option<uuid::Uuid>,
+        start: Option<(gremlin_model::GValue, String)>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Option<Entity<ExplorerPanel>> {
+        let connection = connection.or_else(|| {
+            ConnectionManager::try_global(cx).and_then(|m| m.read(cx).active().map(|c| c.id))
+        })?;
+        let panel = ExplorerPanel::new(Some(connection), start, window, cx);
+        self.dock.update(cx, |dock, cx| {
+            dock.add_panel_view(
+                panel_handle(panel.clone()),
+                DockPlacement::Center,
+                None,
+                window,
+                cx,
+            );
+        });
+        Some(panel)
+    }
+
+    /// Open a new tab with `text` bound to `connection`, without running it.
+    pub fn open_query(
+        &mut self,
+        text: &str,
+        connection: Option<uuid::Uuid>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<EditorPanel> {
+        let tab = self.new_tab(window, cx);
+        let text = text.to_owned();
+        tab.update(cx, |tab, cx| {
+            if connection.is_some() {
+                tab.set_connection(connection, cx);
+            }
+            let editor = tab.editor().clone();
+            editor.update(cx, |e, cx| e.set_text(&text, window, cx));
+        });
+        tab
+    }
+
     /// Open a tab with `text` bound to `connection`, and run it (the `--run` flag).
     pub fn open_and_run(
         &mut self,
@@ -468,7 +513,7 @@ impl Workspace {
         connection: Option<uuid::Uuid>,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
-    ) {
+    ) -> Entity<EditorPanel> {
         let tab = self.new_tab(window, cx);
         let text = text.to_owned();
         tab.update(cx, |tab, cx| {
@@ -482,6 +527,7 @@ impl Workspace {
                 e.run(&crate::actions::editor::RunQuery, window, cx);
             });
         });
+        tab
     }
 
     /// Open a new editor tab in the editor area and focus it.
@@ -678,6 +724,9 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &SplitRight, window, cx| this.split_right(window, cx)))
             .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
                 this.toggle_assistant(window, cx);
+            }))
+            .on_action(cx.listener(|this, a: &OpenGraphExplorer, window, cx| {
+                this.open_explorer(a.connection, None, window, cx);
             }))
             .on_action(cx.listener(|this, a: &OpenSchemaGraph, window, cx| {
                 this.open_schema_graph(a.connection, window, cx);

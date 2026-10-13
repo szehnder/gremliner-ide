@@ -33,7 +33,7 @@ use ui_assistant::{Disclosure, OpenPromptBar, PromptBar, PromptBarEvent};
 const SAVE_DEBOUNCE: Duration = Duration::from_millis(500);
 
 /// A request to run Gremlin, raised by an editor tab. `query-execution` consumes these.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RunRequest {
     pub tab_id: Uuid,
     pub connection_id: Option<Uuid>,
@@ -43,6 +43,8 @@ pub struct RunRequest {
     pub mode: ui_editor::RunMode,
     /// A query the app generated (the debugger's prefixes): errors are not mapped onto the editor text.
     pub generated: bool,
+    /// Values for the script's parameters (ADR-0030).
+    pub bindings: Vec<(String, gremlin_model::GValue)>,
 }
 
 #[derive(Debug, Clone)]
@@ -425,6 +427,7 @@ impl EditorPanel {
             range,
             mode,
             generated: false,
+            bindings: Vec::new(),
         };
         if let Some(id) = self.connection_id {
             ConnectionManager::global(cx).update(cx, |m, cx| m.set_active(Some(id), cx));

@@ -113,6 +113,12 @@ fn register_commands(cx: &mut App) {
             OpenSchemaGraph::default(),
         )
         .keywords(&["labels", "model"]),
+        CommandMeta::new(
+            "Connection",
+            "Open Graph Explorer",
+            OpenGraphExplorer::default(),
+        )
+        .keywords(&["path", "search", "browse", "no-code"]),
         CommandMeta::new("Connection", "Refresh Schema", RefreshSchema::default())
             .keywords(&["discover", "labels"]),
         CommandMeta::new("Editor", "New Query Tab", NewQueryTab).keywords(&["editor", "open"]),

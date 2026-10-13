@@ -150,6 +150,17 @@ impl Runner {
                     }
                 }
                 GraphViewEvent::ShowInTable(_) => {}
+                GraphViewEvent::SearchPathFrom { id, name } => {
+                    let connection = this.tab_connection.get(&tab).copied();
+                    let start = (id.clone(), name.clone());
+                    window.defer(cx, move |window, cx| {
+                        if let Some(ws) = crate::Workspace::for_window(window, cx) {
+                            ws.update(cx, |ws, cx| {
+                                ws.open_explorer(connection, Some(start), window, cx)
+                            });
+                        }
+                    });
+                }
             },
         ));
         self.graphs.insert(tab, graph);
@@ -486,6 +497,7 @@ impl Runner {
         let base = request.range.start;
         let tab_id = request.tab_id;
         let generated = request.generated;
+        let bindings = request.bindings.clone();
         let script = request.text.clone();
         cx.spawn_in(window, async move |this, cx| {
             // Connect first if needed.
@@ -523,7 +535,9 @@ impl Runner {
 
             // Stream on the I/O runtime; batches cross back over a channel.
             let (tx, mut rx) = mpsc::unbounded::<Msg>();
-            let io = cx.update(|_, cx| spawn_io(cx, stream(client, sent, timeout, cancel_rx, tx)));
+            let io = cx.update(|_, cx| {
+                spawn_io(cx, stream(client, sent, bindings, timeout, cancel_rx, tx))
+            });
             let Ok(io) = io else { return };
             let mut cap_reached = false;
             while let Some(msg) = rx.next().await {
@@ -678,11 +692,15 @@ impl Runner {
 async fn stream(
     client: gremlin_client::Client,
     script: String,
+    bindings: Vec<(String, GValue)>,
     timeout: Duration,
     mut cancel: oneshot::Receiver<()>,
     tx: mpsc::UnboundedSender<Msg>,
 ) {
-    let request = Request::new(script).timeout(timeout);
+    let mut request = Request::new(script).timeout(timeout);
+    for (name, value) in bindings {
+        request = request.binding(name, value);
+    }
     let mut results = match client.submit(request).await {
         Ok(stream) => stream,
         Err(err) => {

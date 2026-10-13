@@ -218,3 +218,6 @@ The gpui-kit code editor supports range decorations (`create_range_decorations_c
 Frame and an optional colour), diagnostics and completion. It has no inlay hints and no virtual text, so
 per-step annotations (the debugger's counts) have to live outside the text. `InputBaseState::set_disabled`
 makes the editor read-only.
+
+`ElementSnapshot::disabled()` is `None` for gpui-kit `Button`s: they don't expose the flag. Test a disabled
+button by clicking it and asserting that nothing happened.

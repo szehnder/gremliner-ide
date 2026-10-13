@@ -6,6 +6,7 @@ pub mod catalogue;
 pub mod complete;
 pub mod dialect;
 pub mod document;
+pub mod explorer;
 pub mod format;
 pub mod language;
 pub mod profile_match;

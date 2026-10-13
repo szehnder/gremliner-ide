@@ -59,6 +59,13 @@ pub struct OpenSampleQuery {
     pub query: String,
 }
 
+/// Open the graph explorer on `connection` (the active connection when `None`).
+#[derive(Clone, PartialEq, Debug, Default, gpui_kit::Action)]
+#[action(namespace = workspace, no_json)]
+pub struct OpenGraphExplorer {
+    pub connection: Option<uuid::Uuid>,
+}
+
 /// Open the schema graph of `connection` (the active connection when `None`).
 #[derive(Clone, PartialEq, Debug, Default, gpui_kit::Action)]
 #[action(namespace = workspace, no_json)]

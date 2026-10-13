@@ -258,6 +258,7 @@ impl DebugView {
             range: 0..0,
             mode: ui_editor::RunMode::Run,
             generated: true,
+            bindings: Vec::new(),
         };
         // A new run cancels the previous step's, so stepping quickly never piles up queries.
         Runner::global(cx).update(cx, |r, cx| r.execute(request, window, cx));

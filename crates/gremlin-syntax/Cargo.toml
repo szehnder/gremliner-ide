@@ -14,6 +14,7 @@ tree-sitter-language.workspace = true
 serde.workspace = true
 toml.workspace = true
 schema.workspace = true
+gremlin-model.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
