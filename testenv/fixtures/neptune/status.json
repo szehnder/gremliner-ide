@@ -1,22 +1,30 @@
 {
   "status": "healthy",
-  "startTime": "Tue Sep 09 14:02:11 UTC 2026",
-  "dbEngineVersion": "1.3.2.1.R1",
+  "startTime": "Tue Sep 30 14:02:11 UTC 2026",
+  "dbEngineVersion": "1.4.5.0.R2",
   "role": "writer",
   "dfeQueryEngine": "viaQueryHint",
-  "gremlin": { "version": "tinkerpop-3.7.1" },
-  "sparql": { "version": "sparql-1.1" },
-  "opencypher": { "version": "Neptune-9.0.20190305-1.0" },
+  "gremlin": {
+    "version": "tinkerpop-3.7.3"
+  },
+  "sparql": {
+    "version": "sparql-1.1"
+  },
+  "opencypher": {
+    "version": "Neptune-9.0.20190305-1.0"
+  },
   "labMode": {
     "ObjectIndex": "disabled",
     "ReadWriteConflictDetection": "enabled"
   },
   "features": {
-    "SlowQueryLogs": "disabled",
-    "ResultCache": { "status": "disabled" },
+    "SlowQueryLogs": "info",
+    "ResultCache": {
+      "status": "disabled"
+    },
     "IAMAuthentication": "enabled",
     "Streams": "disabled",
-    "AuditLog": "disabled"
+    "AuditLog": "enabled"
   },
   "settings": {
     "clusterQueryTimeoutInMs": "120000",

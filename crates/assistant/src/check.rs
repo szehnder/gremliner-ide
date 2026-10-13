@@ -63,16 +63,13 @@ pub fn check(query: &str, schema: Option<&Schema>, dialect: &Dialect) -> Vec<Iss
             "Lambdas/closures are not allowed; use Gremlin steps instead.",
         ));
     }
-    let unsupported = dialect.unsupported_steps();
-    if !unsupported.is_empty()
+    let restrictions = dialect.restrictions();
+    if !restrictions.unsupported_steps.is_empty()
         && let Some(stmt) = statements.first()
     {
         for step in doc.steps(stmt).iter().flat_map(|s| s.walk()) {
-            if unsupported.contains(&step.name.as_str()) {
-                out.push(Issue::new(
-                    IssueKind::Unsupported,
-                    format!("`{}()` is not supported by this database.", step.name),
-                ));
+            if let Some(why) = restrictions.unsupported(&step.name) {
+                out.push(Issue::new(IssueKind::Unsupported, why.to_owned()));
             }
         }
     }

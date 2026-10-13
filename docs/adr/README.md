@@ -39,3 +39,4 @@ One decision per file, MADR-style (see [0001](0001-record-architecture-decisions
 | [0033](0033-streaming-simd-graphson-decoding.md) | Streaming GraphSON decoding with simd-json | accepted |
 | [0034](0034-session-only-secret-fallback.md) | Session-only secret fallback and log redaction (amends 0022) | accepted |
 | [0035](0035-ui-theme-crate.md) | A `ui-theme` crate for design tokens (amends 0004, 0023) | accepted |
+| [0036](0036-neptune-transport-details.md) | Neptune transport: ring-only AWS stack, tunnels, HTTP features, restriction table (amends 0016) | accepted |

@@ -274,7 +274,24 @@ impl EditorPanel {
                 .read(cx)
                 .schema(id)
         });
-        self.editor.update(cx, |e, cx| e.set_schema(schema, cx));
+        let manager = ConnectionManager::global(cx);
+        let restrictions = self
+            .connection_id
+            .map(|id| {
+                let m = manager.read(cx);
+                match m.session(id) {
+                    Some(session) => session.capabilities.restrictions.clone(),
+                    None => m
+                        .get(id)
+                        .map(providers::restrictions_for)
+                        .unwrap_or_else(gremlin_syntax::dialect::Restrictions::none),
+                }
+            })
+            .unwrap_or_else(gremlin_syntax::dialect::Restrictions::none);
+        self.editor.update(cx, |e, cx| {
+            e.set_schema(schema, cx);
+            e.set_restrictions(restrictions, cx);
+        });
     }
 
     pub fn set_connection(&mut self, id: Option<Uuid>, cx: &mut Context<'_, Self>) {

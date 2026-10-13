@@ -138,7 +138,7 @@ impl ColorTag {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProviderConfig {
     GremlinServer(GremlinServerConfig),
-    /// Amazon Neptune. Configurable now (paste-to-fill); connecting arrives with `provider-neptune-aws`.
+    /// Amazon Neptune, with IAM SigV4 authentication.
     NeptuneAws(NeptuneConfig),
 }
 
@@ -217,11 +217,21 @@ impl GremlinServerConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NeptuneConfig {
+    /// Cluster, reader or instance endpoint. Requests are signed for this host even through a tunnel.
     pub host: String,
     pub port: u16,
+    /// AWS region; inferred from the endpoint when it is a `*.neptune.amazonaws.com` name.
     pub region: String,
     /// Sign requests with AWS SigV4 (IAM database authentication).
     pub iam_auth: bool,
+    /// AWS profile from `~/.aws/config` or `~/.aws/credentials`; `None` uses the default credential chain.
+    pub profile: Option<String>,
+    /// Connect to this `host:port` (a local SSH/SSM tunnel) instead of the endpoint.
+    pub tunnel: Option<String>,
+    /// Skip certificate checks, for tunnels whose certificate does not match.
+    pub accept_invalid_certs: bool,
+    /// Neptune always uses TLS; off only for stand-ins such as a local Gremlin Server.
+    pub tls: bool,
 }
 
 impl Default for NeptuneConfig {
@@ -231,7 +241,51 @@ impl Default for NeptuneConfig {
             port: 8182,
             region: String::new(),
             iam_auth: true,
+            profile: None,
+            tunnel: None,
+            accept_invalid_certs: false,
+            tls: true,
         }
+    }
+}
+
+impl NeptuneConfig {
+    /// The region to sign for: the configured one, else the one in the endpoint name.
+    pub fn signing_region(&self) -> Option<String> {
+        let region = self.region.trim();
+        if region.is_empty() {
+            crate::endpoint::neptune_region(&self.host)
+        } else {
+            Some(region.to_owned())
+        }
+    }
+
+    fn authority(&self) -> String {
+        if self.host.contains(':') && !self.host.starts_with('[') {
+            format!("[{}]:{}", self.host, self.port)
+        } else {
+            format!("{}:{}", self.host, self.port)
+        }
+    }
+
+    /// The WebSocket URL, always naming the real endpoint.
+    pub fn url(&self) -> String {
+        let scheme = if self.tls { "wss" } else { "ws" };
+        format!("{scheme}://{}/gremlin", self.authority())
+    }
+
+    /// Base URL for Neptune's HTTP endpoints (`/status`, `/gremlin/profile`, ...).
+    pub fn http_base(&self) -> String {
+        let scheme = if self.tls { "https" } else { "http" };
+        format!("{scheme}://{}", self.authority())
+    }
+
+    /// The tunnel address, when one is set.
+    pub fn tunnel_addr(&self) -> Option<&str> {
+        self.tunnel
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
     }
 }
 
@@ -267,6 +321,25 @@ mod tests {
         assert!(!json.contains("password\":\""), "{json}");
         let back: ConnectionConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back, c);
+    }
+
+    #[test]
+    fn neptune_urls_and_old_configs() {
+        let c = NeptuneConfig {
+            host: "db.cluster-abc.us-east-2.neptune.amazonaws.com".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            c.url(),
+            "wss://db.cluster-abc.us-east-2.neptune.amazonaws.com:8182/gremlin"
+        );
+        assert_eq!(c.signing_region().as_deref(), Some("us-east-2"));
+        // Settings saved before profiles and tunnels existed still load.
+        let old: NeptuneConfig = serde_json::from_str(
+            r#"{"host":"h","port":8182,"region":"eu-west-1","iam_auth":true}"#,
+        )
+        .unwrap();
+        assert!(old.tls && old.profile.is_none() && old.tunnel_addr().is_none());
     }
 
     #[test]

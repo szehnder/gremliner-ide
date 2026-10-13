@@ -42,6 +42,7 @@ pub struct ConnectionManager {
     status: HashMap<Uuid, ConnStatus>,
     sessions: HashMap<Uuid, Session>,
     active: Option<Uuid>,
+    aws_files: Option<providers::neptune::AwsFiles>,
 }
 
 struct ManagerGlobal(Entity<ConnectionManager>);
@@ -80,6 +81,7 @@ impl ConnectionManager {
             status: HashMap::new(),
             sessions: HashMap::new(),
             active: None,
+            aws_files: None,
         });
         cx.set_global(ManagerGlobal(entity));
     }
@@ -90,6 +92,24 @@ impl ConnectionManager {
 
     pub fn try_global(cx: &App) -> Option<Entity<Self>> {
         cx.try_global::<ManagerGlobal>().map(|g| g.0.clone())
+    }
+
+    /// Read AWS profiles from these files instead of the usual locations (tests, custom setups).
+    pub fn set_aws_files(&mut self, files: Option<providers::neptune::AwsFiles>) {
+        self.aws_files = files;
+    }
+
+    /// The AWS profiles for the Neptune profile picker, read off the UI thread.
+    pub fn aws_profiles(&self, cx: &App) -> Task<Vec<providers::neptune::AwsProfile>> {
+        let files = self
+            .aws_files
+            .clone()
+            .or_else(providers::neptune::AwsFiles::from_env);
+        cx.background_spawn(async move {
+            files
+                .map(|f| providers::neptune::list_profiles(&f))
+                .unwrap_or_default()
+        })
     }
 
     /// The app database (schema cache, connections).

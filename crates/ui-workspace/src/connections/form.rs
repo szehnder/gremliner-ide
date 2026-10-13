@@ -85,6 +85,14 @@ pub struct ConnectionForm {
     pub password: Entity<InputState>,
     pub alias: Entity<InputState>,
     pub region: Entity<InputState>,
+    /// Neptune: connect through this local tunnel (`host:port`).
+    pub tunnel: Entity<InputState>,
+    /// Neptune: AWS profile; `None` is the default credential chain.
+    pub aws_profile: Option<String>,
+    /// Profiles found in the user's AWS files.
+    pub aws_profiles: Vec<providers::neptune::AwsProfile>,
+    /// The region last filled in from the host name (replaced as the host changes).
+    inferred_region: Option<String>,
     pub tls: bool,
     pub accept_invalid_certs: bool,
     pub iam_auth: bool,
@@ -162,6 +170,21 @@ impl ConnectionForm {
         });
         let alias = input(window, cx, "g", &server.alias);
         let region = input(window, cx, "us-east-1", &neptune.region);
+        let tunnel = input(
+            window,
+            cx,
+            "Optional, e.g. localhost:8182",
+            neptune.tunnel.as_deref().unwrap_or(""),
+        );
+        let profiles = ConnectionManager::global(cx).read(cx).aws_profiles(cx);
+        cx.spawn(async move |this, cx| {
+            let profiles = profiles.await;
+            let _ = this.update(cx, |this, cx| {
+                this.aws_profiles = profiles;
+                cx.notify();
+            });
+        })
+        .detach();
 
         let subscriptions = vec![
             cx.subscribe_in(
@@ -200,8 +223,12 @@ impl ConnectionForm {
             password,
             alias,
             region,
+            tunnel,
+            aws_profile: neptune.profile.clone(),
+            aws_profiles: Vec::new(),
+            inferred_region: None,
             tls: server.tls,
-            accept_invalid_certs: server.accept_invalid_certs,
+            accept_invalid_certs: server.accept_invalid_certs || neptune.accept_invalid_certs,
             iam_auth: neptune.iam_auth,
             read_only: config.read_only,
             environment: config.environment,
@@ -220,6 +247,7 @@ impl ConnectionForm {
     fn on_host_changed(&mut self, value: String, window: &mut Window, cx: &mut Context<'_, Self>) {
         let previous = std::mem::replace(&mut self.last_host, value.clone());
         self.errors.host = None;
+        self.infer_region(&value, window, cx);
         let pasted = value.len() >= previous.len() + 2;
         if !pasted {
             cx.notify();
@@ -235,6 +263,25 @@ impl ConnectionForm {
             return;
         }
         self.apply_endpoint(parsed, window, cx);
+    }
+
+    /// Fill the region from a Neptune host name, unless the user typed a region of their own.
+    fn infer_region(&mut self, host: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let Some(region) = endpoint::neptune_region(host) else {
+            return;
+        };
+        let current = Self::text(&self.region, cx);
+        let ours = current.is_empty() || self.inferred_region.as_deref() == Some(current.as_str());
+        if ours && current != region {
+            self.region
+                .update(cx, |s, cx| s.set_value(region.clone(), window, cx));
+        }
+        if ours {
+            self.inferred_region = Some(region);
+        }
+        if self.kind == ProviderKind::GremlinServer {
+            self.kind = ProviderKind::NeptuneAws;
+        }
     }
 
     fn apply_endpoint(
@@ -263,7 +310,8 @@ impl ConnectionForm {
         }
         if let Some(region) = parsed.neptune_region {
             self.kind = ProviderKind::NeptuneAws;
-            set(&self.region, region, window, cx);
+            set(&self.region, region.clone(), window, cx);
+            self.inferred_region = Some(region);
         } else {
             self.kind = ProviderKind::GremlinServer;
         }
@@ -345,6 +393,10 @@ impl ConnectionForm {
                 port,
                 region: Self::text(&self.region, cx),
                 iam_auth: self.iam_auth,
+                profile: self.aws_profile.clone(),
+                tunnel: Some(Self::text(&self.tunnel, cx)).filter(|t| !t.is_empty()),
+                accept_invalid_certs: self.accept_invalid_certs,
+                tls: true,
             }),
         };
         let config = ConnectionConfig {
@@ -605,17 +657,99 @@ impl Render for ConnectionForm {
                         )),
                 )
         } else {
+            let profile_chip =
+                |id: String, label: String, value: Option<String>, cx: &mut Context<'_, Self>| {
+                    let selected = self.aws_profile == value;
+                    Button::new(SharedString::from(id))
+                        .label(label)
+                        .small()
+                        .when(selected, |b| b.primary())
+                        .when(!selected, |b| b.outline())
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.aws_profile = value.clone();
+                            cx.notify();
+                        }))
+                };
+            let mut chips = vec![profile_chip(
+                "aws-profile-default-chain".into(),
+                "Default credentials".into(),
+                None,
+                cx,
+            )];
+            for p in self.aws_profiles.clone() {
+                let label = if p.sso {
+                    format!("{} · SSO", p.name)
+                } else {
+                    p.name.clone()
+                };
+                chips.push(profile_chip(
+                    format!("aws-profile-{}", p.name),
+                    label,
+                    Some(p.name),
+                    cx,
+                ));
+            }
+            // A saved profile that is no longer in the AWS files stays selectable.
+            if let Some(saved) = self
+                .aws_profile
+                .clone()
+                .filter(|s| !self.aws_profiles.iter().any(|p| &p.name == s))
+            {
+                chips.push(profile_chip(
+                    format!("aws-profile-{saved}"),
+                    format!("{saved} (not found)"),
+                    Some(saved),
+                    cx,
+                ));
+            }
+            let profiles = v_flex()
+                .gap(Tokens::space(1.0))
+                .child(
+                    h_flex()
+                        .id("aws-profiles")
+                        .test_support()
+                        .flex_wrap()
+                        .gap(Tokens::space(1.0))
+                        .children(chips),
+                )
+                .child(
+                    div()
+                        .text_size(Tokens::text_xs())
+                        .text_color(theme.muted_foreground)
+                        .child("From ~/.aws/config and ~/.aws/credentials. Default credentials use AWS_PROFILE, environment variables or the instance role."),
+                );
             v_flex()
                 .gap(Tokens::space(3.0))
                 .child(endpoint_row)
-                .child(field("Region", Input::new(&self.region), None, cx))
-                .child(switch("conn-iam", "IAM database authentication", self.iam_auth, |t, v| t.iam_auth = v, cx))
                 .child(
-                    div()
-                        .text_size(Tokens::text_sm())
-                        .text_color(theme.muted_foreground)
-                        .child("Neptune settings can be saved now; connecting to Neptune arrives in a later version."),
+                    h_flex()
+                        .gap(Tokens::space(3.0))
+                        .items_start()
+                        .child(
+                            field("Region", Input::new(&self.region), None, cx)
+                                .w(Tokens::size(160.0)),
+                        )
+                        .child(
+                            field("Tunnel address", Input::new(&self.tunnel), None, cx).flex_1(),
+                        ),
                 )
+                .child(switch(
+                    "conn-iam",
+                    "IAM database authentication (SigV4)",
+                    self.iam_auth,
+                    |t, v| t.iam_auth = v,
+                    cx,
+                ))
+                .when(self.iam_auth, |this| {
+                    this.child(field("AWS profile", profiles, None, cx))
+                })
+                .child(switch(
+                    "conn-insecure",
+                    "Accept invalid certificates (tunnels whose certificate does not match)",
+                    self.accept_invalid_certs,
+                    |t, v| t.accept_invalid_certs = v,
+                    cx,
+                ))
         };
 
         let test_result = match &self.test {
@@ -631,11 +765,16 @@ impl Render for ConnectionForm {
                     .child("Testing connection…"),
             ),
             TestState::Passed(info) => {
+                let engine = info
+                    .engine_version
+                    .as_ref()
+                    .map(|v| format!(" · Neptune {v}"))
+                    .unwrap_or_default();
                 let version = info
                     .tinkerpop_version
                     .as_ref()
-                    .map(|v| format!(" · TinkerPop {v}"))
-                    .unwrap_or_default();
+                    .map(|v| format!("{engine} · TinkerPop {v}"))
+                    .unwrap_or(engine);
                 Some(
                     h_flex()
                         .id("conn-test-result")

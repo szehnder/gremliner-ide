@@ -4,6 +4,7 @@
 
 pub mod catalogue;
 pub mod complete;
+pub mod dialect;
 pub mod document;
 pub mod format;
 pub mod language;

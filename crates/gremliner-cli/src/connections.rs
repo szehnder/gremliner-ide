@@ -1,4 +1,5 @@
-//! `gremliner-cli connections list|add|test|remove`: the same database and credential store as the app.
+//! `gremliner-cli connections list|add|test|remove|aws-profiles`: the same database and credential store as
+//! the app.
 
 use std::io::Read as _;
 use std::path::PathBuf;
@@ -38,9 +39,32 @@ pub enum Cmd {
         env: EnvArg,
         #[arg(long)]
         read_only: bool,
-        /// Skip TLS certificate verification (development servers).
+        /// Skip TLS certificate verification (development servers, tunnels).
         #[arg(long)]
         accept_invalid_certs: bool,
+        /// Amazon Neptune even when the host is not a `*.neptune.amazonaws.com` name.
+        #[arg(long)]
+        neptune: bool,
+        /// Neptune: AWS region (default: from the endpoint name).
+        #[arg(long)]
+        region: Option<String>,
+        /// Neptune: AWS profile (default: the default credential chain).
+        #[arg(long)]
+        profile: Option<String>,
+        /// Neptune: connect through this local tunnel (`host:port`), signing for the endpoint.
+        #[arg(long)]
+        tunnel: Option<String>,
+        /// Neptune: no IAM authentication.
+        #[arg(long)]
+        no_iam: bool,
+        /// Neptune: plain ws:// (stand-ins such as a local Gremlin Server).
+        #[arg(long)]
+        no_tls: bool,
+    },
+    /// List the AWS profiles Neptune connections can use.
+    AwsProfiles {
+        #[arg(long)]
+        json: bool,
     },
     /// Test a saved connection: prints latency and version, exits non-zero on failure.
     Test { name: String },
@@ -106,20 +130,31 @@ pub fn run(cmd: Cmd, data_dir: Option<PathBuf>, runtime: &tokio::runtime::Runtim
             env,
             read_only,
             accept_invalid_certs,
+            neptune,
+            region,
+            profile,
+            tunnel,
+            no_iam,
+            no_tls,
         } => {
             if let Err(err) = validate_name(&store.list()?, &name, None) {
                 bail!("{err}");
             }
             let parsed =
                 endpoint::parse(&url).with_context(|| format!("not an endpoint: {url}"))?;
-            let provider = match &parsed.neptune_region {
-                Some(region) => ProviderConfig::NeptuneAws(NeptuneConfig {
+            let is_neptune = neptune || parsed.neptune_region.is_some();
+            let provider = match is_neptune {
+                true => ProviderConfig::NeptuneAws(NeptuneConfig {
                     host: parsed.host.clone(),
                     port: parsed.port.unwrap_or(8182),
-                    region: region.clone(),
-                    ..Default::default()
+                    region: region.or(parsed.neptune_region.clone()).unwrap_or_default(),
+                    iam_auth: !no_iam,
+                    profile,
+                    tunnel,
+                    accept_invalid_certs,
+                    tls: !no_tls,
                 }),
-                None => ProviderConfig::GremlinServer(GremlinServerConfig {
+                false => ProviderConfig::GremlinServer(GremlinServerConfig {
                     host: parsed.host.clone(),
                     port: parsed.port.unwrap_or(8182),
                     path: parsed.path.clone().unwrap_or_else(|| "/gremlin".into()),
@@ -154,10 +189,14 @@ pub fn run(cmd: Cmd, data_dir: Option<PathBuf>, runtime: &tokio::runtime::Runtim
             let report = runtime.block_on(test_connection(&config, password));
             match report.result {
                 Ok(info) => {
+                    let engine = info
+                        .engine_version
+                        .map(|v| format!(", Neptune {v}"))
+                        .unwrap_or_default();
                     let version = info
                         .tinkerpop_version
-                        .map(|v| format!(", TinkerPop {v}"))
-                        .unwrap_or_default();
+                        .map(|v| format!("{engine}, TinkerPop {v}"))
+                        .unwrap_or(engine);
                     println!(
                         "OK: connected to {} in {} ms{version}",
                         config.name,
@@ -173,6 +212,29 @@ pub fn run(cmd: Cmd, data_dir: Option<PathBuf>, runtime: &tokio::runtime::Runtim
                         eprintln!("({})", storage::secrets::redact(&err.detail));
                     }
                     std::process::exit(1);
+                }
+            }
+        }
+        Cmd::AwsProfiles { json } => {
+            let profiles = providers::neptune::AwsFiles::from_env()
+                .map(|f| providers::neptune::list_profiles(&f))
+                .unwrap_or_default();
+            if json {
+                let rows: Vec<_> = profiles
+                    .iter()
+                    .map(|p| serde_json::json!({"name": p.name, "sso": p.sso, "region": p.region}))
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&rows)?);
+            } else if profiles.is_empty() {
+                println!("No AWS profiles found in ~/.aws/config or ~/.aws/credentials.");
+            } else {
+                for p in profiles {
+                    println!(
+                        "{:<24} {:<4} {}",
+                        p.name,
+                        if p.sso { "SSO" } else { "" },
+                        p.region.unwrap_or_default()
+                    );
                 }
             }
         }

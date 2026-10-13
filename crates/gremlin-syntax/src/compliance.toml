@@ -1,0 +1,33 @@
+# Gremlin restrictions by database and TinkerPop version, used for editor warnings and the assistant's checks.
+# Neptune list: "Gremlin standards compliance in Amazon Neptune" in the Neptune user guide.
+
+[neptune]
+lambdas = false
+# step = reason shown to the user
+[neptune.unsupported]
+io = "Neptune does not support io(); load data with the Neptune bulk loader instead."
+program = "Neptune does not support program() (no GraphComputer)."
+withComputer = "Neptune does not support withComputer() (no GraphComputer)."
+pageRank = "Neptune does not support pageRank() (no GraphComputer)."
+peerPressure = "Neptune does not support peerPressure() (no GraphComputer)."
+connectedComponent = "Neptune does not support connectedComponent() (no GraphComputer)."
+shortestPath = "Neptune does not support shortestPath() (no GraphComputer)."
+subgraph = "Neptune does not support subgraph()."
+call = "Neptune does not support call()."
+
+# Steps by the TinkerPop release that introduced them: a server older than `since` rejects them.
+[[added]]
+since = "3.6.0"
+steps = ["mergeV", "mergeE", "call"]
+
+[[added]]
+since = "3.7.0"
+steps = ["concat"]
+
+[[added]]
+since = "3.7.1"
+steps = [
+    "asString", "length", "toLower", "toUpper", "trim", "lTrim", "rTrim", "reverse", "replace", "split",
+    "substring", "format", "asDate", "dateAdd", "dateDiff", "combine", "merge", "difference", "disjunct",
+    "intersect", "conjoin", "product",
+]

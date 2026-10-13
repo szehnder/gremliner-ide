@@ -1,16 +1,19 @@
 //! The provider abstraction (ADR-0015) and the connected [`Session`].
 //!
-//! This change implements connect, capability detection and connection testing. `profile`, `explain` and
-//! `schema_summary` join the trait with the changes that use them (query-profile-explain, schema-discovery).
+//! Providers connect and detect capabilities; provider-specific HTTP features (Neptune's profile, explain
+//! and statistics endpoints) are reached through the session's [`ServerApi`].
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures::future::BoxFuture;
 use gremlin_client::Client;
+use gremlin_syntax::dialect::Restrictions;
 
 use crate::config::{ConnectionConfig, ProviderConfig, ProviderKind};
 use crate::error::ProviderError;
 use crate::gremlin_server::GremlinServerProvider;
+use crate::neptune::{NeptuneProvider, compliance};
 
 /// What the rest of the IDE may use on this connection.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -21,6 +24,12 @@ pub struct Capabilities {
     pub explain: bool,
     /// Gremlin-Groovy script evaluation (`eval` requests).
     pub script_eval: bool,
+    /// A statistics summary for fast schema discovery (Neptune).
+    pub statistics: bool,
+    /// Amazon Neptune (dialect restrictions, HTTP profile/explain).
+    pub neptune: bool,
+    /// Lambdas, unsupported steps, and steps newer than the server.
+    pub restrictions: Restrictions,
 }
 
 impl Capabilities {
@@ -32,8 +41,41 @@ impl Capabilities {
             profile: known_3x,
             explain: known_3x,
             script_eval: true,
+            statistics: false,
+            neptune: false,
+            restrictions: compliance::gremlin_server(version),
         }
     }
+
+    /// Neptune: `api` is true when its HTTP endpoints answered (profile, explain, statistics).
+    pub fn neptune(version: Option<&str>, api: bool) -> Self {
+        Self {
+            profile: true,
+            explain: true,
+            script_eval: true,
+            statistics: api,
+            neptune: true,
+            restrictions: compliance::neptune(version),
+        }
+    }
+}
+
+/// Restrictions known before connecting, from the kind of connection alone.
+pub fn restrictions_for(config: &ConnectionConfig) -> Restrictions {
+    match config.provider.kind() {
+        ProviderKind::GremlinServer => Restrictions::none(),
+        ProviderKind::NeptuneAws => compliance::neptune(None),
+    }
+}
+
+/// Provider HTTP features beyond the Gremlin protocol. Each returns the endpoint's raw response body.
+pub trait ServerApi: Send + Sync {
+    /// Neptune `/propertygraph/statistics/summary?mode=detailed`.
+    fn statistics_summary(&self) -> BoxFuture<'_, Result<String, ProviderError>>;
+    /// Neptune `/gremlin/profile`.
+    fn profile<'a>(&'a self, query: &'a str) -> BoxFuture<'a, Result<String, ProviderError>>;
+    /// Neptune `/gremlin/explain`.
+    fn explain<'a>(&'a self, query: &'a str) -> BoxFuture<'a, Result<String, ProviderError>>;
 }
 
 /// What a connection learned about its server.
@@ -41,6 +83,8 @@ impl Capabilities {
 pub struct ServerInfo {
     /// e.g. `3.7.3`, when the server reveals it.
     pub tinkerpop_version: Option<String>,
+    /// Neptune engine release, e.g. `1.4.5.0.R2`.
+    pub engine_version: Option<String>,
     /// Round trip of a trivial traversal.
     pub latency: Duration,
 }
@@ -51,6 +95,8 @@ pub struct Session {
     pub client: Client,
     pub info: ServerInfo,
     pub capabilities: Capabilities,
+    /// Provider HTTP endpoints, when the server has them.
+    pub api: Option<Arc<dyn ServerApi>>,
 }
 
 impl std::fmt::Debug for Session {
@@ -79,9 +125,10 @@ pub fn provider_for(
             password,
             Duration::from_millis(config.timeout_ms),
         ))),
-        ProviderConfig::NeptuneAws(_) => Err(ProviderError::unsupported(
-            "Amazon Neptune connections are not available in this build yet.",
-        )),
+        ProviderConfig::NeptuneAws(neptune) => Ok(Box::new(NeptuneProvider::new(
+            neptune.clone(),
+            Duration::from_millis(config.timeout_ms),
+        ))),
     }
 }
 

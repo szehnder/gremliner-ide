@@ -14,6 +14,7 @@ use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use gremlin_syntax::complete::{SignatureHelp, schema_issues, signature_help};
+use gremlin_syntax::dialect::{Restrictions, restriction_issues};
 use gremlin_syntax::{Diagnostic, Document, Severity, line_col};
 use schema::Schema;
 
@@ -59,6 +60,8 @@ pub struct QueryEditor {
     last_cursor: usize,
     /// Schema, schema warnings and recent completions, shared with the completion and fix providers.
     shared: SharedState,
+    /// What the connected database rejects (lambdas, steps), reported as warnings.
+    restrictions: Restrictions,
     signature: Option<SignatureHelp>,
     /// (text revision, cursor) the signature help was computed for.
     signature_at: (u64, usize),
@@ -118,6 +121,7 @@ impl QueryEditor {
             highlighted: None,
             last_cursor: usize::MAX,
             shared,
+            restrictions: Restrictions::none(),
             signature: None,
             signature_at: (u64::MAX, usize::MAX),
             focus_handle: cx.focus_handle(),
@@ -256,8 +260,21 @@ impl QueryEditor {
         self.shared.borrow().schema.clone()
     }
 
-    /// Append warnings for labels and keys the schema does not know (only once a schema exists).
+    /// Warn about what the connected database rejects (e.g. lambdas on Neptune).
+    pub fn set_restrictions(&mut self, restrictions: Restrictions, cx: &mut Context<'_, Self>) {
+        if self.restrictions == restrictions {
+            return;
+        }
+        self.restrictions = restrictions;
+        self.publish_diagnostics(cx);
+        cx.notify();
+    }
+
+    /// Append warnings for labels and keys the schema does not know (only once a schema exists), and for
+    /// what the database rejects.
     fn add_schema_warnings(&mut self) {
+        self.diagnostics
+            .extend(restriction_issues(&self.doc, &self.restrictions));
         let mut shared = self.shared.borrow_mut();
         shared.issues = match &shared.schema {
             Some(schema) => schema_issues(self.doc.text(), schema),

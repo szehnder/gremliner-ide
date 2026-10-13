@@ -75,6 +75,9 @@ pub struct ClientConfig {
     pub keep_raw: bool,
     /// Skip TLS certificate verification (`wss://` to development servers with self-signed certs).
     pub accept_invalid_certs: bool,
+    /// Open the socket to this `host:port` instead of the URL's, e.g. a local tunnel. The URL's host is
+    /// still used for the Host header, TLS SNI and certificate checks.
+    pub connect_addr: Option<String>,
 }
 
 impl std::fmt::Debug for ClientConfig {
@@ -85,6 +88,7 @@ impl std::fmt::Debug for ClientConfig {
             .field("signer", &self.signer.as_ref().map(|_| "<signer>"))
             .field("aliases", &self.aliases)
             .field("pool_size", &self.pool_size)
+            .field("connect_addr", &self.connect_addr)
             .finish_non_exhaustive()
     }
 }
@@ -102,6 +106,7 @@ impl ClientConfig {
             batch_size: None,
             keep_raw: false,
             accept_invalid_certs: false,
+            connect_addr: None,
         }
     }
 

@@ -197,6 +197,17 @@ impl Document {
         out
     }
 
+    /// Byte ranges of every closure (`{ ... }`) in the document.
+    pub fn lambda_ranges(&self) -> Vec<Range<usize>> {
+        let mut out = Vec::new();
+        visit(self.tree.root_node(), &mut |n| {
+            if n.kind() == "lambda" {
+                out.push(n.byte_range());
+            }
+        });
+        out
+    }
+
     /// The step tree of a statement.
     pub fn steps(&self, statement: &Statement) -> Vec<StepNode> {
         self.node_of(statement)

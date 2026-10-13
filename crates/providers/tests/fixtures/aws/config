@@ -1,0 +1,29 @@
+# Fixture AWS config for profile listing and SSO tests.
+[default]
+region = us-east-1
+
+[profile analytics]
+region = eu-west-2
+role_arn = arn:aws:iam::123456789012:role/Analytics
+source_profile = default
+
+[profile sso-dev]
+sso_session = gremliner-fixture-session-never-logged-in
+sso_account_id = 123456789012
+sso_role_name = NeptuneReader
+region = us-east-2
+
+[profile legacy-sso]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = NeptuneReader
+
+[sso-session gremliner-fixture-session-never-logged-in]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+[services local]
+neptunedata =
+  endpoint_url = http://localhost:4566

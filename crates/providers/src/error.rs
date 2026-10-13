@@ -10,6 +10,8 @@ pub enum FailureKind {
     Tls,
     NotGremlin,
     Auth,
+    /// Temporary credentials need a fresh sign-in (e.g. an expired AWS SSO session).
+    AuthExpired,
     Server,
     Unsupported,
     Other,

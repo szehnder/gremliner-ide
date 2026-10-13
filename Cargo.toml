@@ -65,11 +65,18 @@ keyring = { version = "3", features = ["linux-native-sync-persistent", "apple-na
 directories = "6"
 
 # AWS
-aws-config = { version = "1", features = ["behavior-version-latest"] }
+# ring-based TLS like the rest of the app; no aws-lc (C toolchain) build.
+aws-config = { version = "1", default-features = false, features = ["behavior-version-latest", "rt-tokio", "sso", "credentials-process"] }
+aws-smithy-http-client = { version = "1", default-features = false, features = ["rustls-ring"] }
 aws-credential-types = "1"
-aws-sigv4 = "1"
+aws-runtime = { version = "1", default-features = false }
+aws-sigv4 = { version = "1", default-features = false, features = ["sign-http", "http1"] }
 aws-smithy-runtime-api = "1"
 http = "1"
+hmac = "0.12"
+hex = "0.4"
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring", "pem"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "logging", "tls12"] }
 
 # CLI / dev
 clap = { version = "4", features = ["derive", "env"] }

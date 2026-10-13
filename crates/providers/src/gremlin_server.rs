@@ -67,9 +67,11 @@ impl GremlinServerProvider {
             client,
             info: ServerInfo {
                 tinkerpop_version,
+                engine_version: None,
                 latency,
             },
             capabilities,
+            api: None,
         })
     }
 }

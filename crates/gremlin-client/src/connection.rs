@@ -88,13 +88,29 @@ impl Connection {
         let connector = config
             .accept_invalid_certs
             .then(|| tokio_tungstenite::Connector::Rustls(crate::tls::insecure_client_config()));
-        let (ws, _resp) = tokio::time::timeout(
-            config.connect_timeout,
-            tokio_tungstenite::connect_async_tls_with_config(request, None, false, connector),
-        )
-        .await
-        .map_err(|_| connect_err(format!("timed out after {:?}", config.connect_timeout)))?
-        .map_err(|e| connect_err(e.to_string()))?;
+        let handshake = async {
+            match &config.connect_addr {
+                // Tunnel: the socket goes to `addr`, while Host and TLS SNI still come from the URL.
+                Some(addr) => {
+                    let tcp = tokio::net::TcpStream::connect(addr.as_str())
+                        .await
+                        .map_err(tokio_tungstenite::tungstenite::Error::Io)?;
+                    let _ = tcp.set_nodelay(true);
+                    tokio_tungstenite::client_async_tls_with_config(request, tcp, None, connector)
+                        .await
+                }
+                None => {
+                    tokio_tungstenite::connect_async_tls_with_config(
+                        request, None, false, connector,
+                    )
+                    .await
+                }
+            }
+        };
+        let (ws, _resp) = tokio::time::timeout(config.connect_timeout, handshake)
+            .await
+            .map_err(|_| connect_err(format!("timed out after {:?}", config.connect_timeout)))?
+            .map_err(|e| connect_err(e.to_string()))?;
         debug!(url = %config.url, "connected");
 
         let (tx, rx) = mpsc::unbounded_channel();

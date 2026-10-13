@@ -17,23 +17,23 @@ pub struct Dialect {
 }
 
 impl Dialect {
-    /// Steps the database rejects (beyond lambdas, which are always refused).
-    pub fn unsupported_steps(&self) -> &'static [&'static str] {
+    /// What the database rejects (`compliance.toml` in `providers`). Lambdas are refused everywhere.
+    pub fn restrictions(&self) -> gremlin_syntax::dialect::Restrictions {
+        let version = self.tinkerpop_version.as_deref();
         if self.neptune {
-            &[
-                "io",
-                "withComputer",
-                "subgraph",
-                "pageRank",
-                "peerPressure",
-                "connectedComponent",
-                "shortestPath",
-                "program",
-                "call",
-            ]
+            gremlin_syntax::dialect::neptune(version)
         } else {
-            &[]
+            gremlin_syntax::dialect::gremlin_server(version)
         }
+    }
+
+    /// Step names the database rejects.
+    pub fn unsupported_steps(&self) -> Vec<String> {
+        self.restrictions()
+            .unsupported_steps
+            .into_iter()
+            .map(|(step, _)| step)
+            .collect()
     }
 
     fn describe(&self) -> String {

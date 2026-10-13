@@ -49,10 +49,18 @@ fn query_error(err: &Error) -> QueryError {
 }
 
 impl Session {
-    /// The database's statistics summary, when the provider offers one. Gremlin Server has none; the
-    /// Neptune provider fills this in from `/propertygraph/statistics/summary`.
+    /// The database's statistics summary, when the provider offers one (Neptune's
+    /// `/propertygraph/statistics/summary`). `None` when statistics are off or stale; discovery then
+    /// samples with queries instead.
     pub async fn schema_summary(&self) -> Option<Summary> {
-        None
+        let api = self.api.as_ref().filter(|_| self.capabilities.statistics)?;
+        match api.statistics_summary().await {
+            Ok(text) => Summary::from_neptune_json(&text),
+            Err(err) => {
+                log::info!("statistics summary unavailable: {err}");
+                None
+            }
+        }
     }
 }
 
