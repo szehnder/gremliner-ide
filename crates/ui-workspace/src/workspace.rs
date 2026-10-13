@@ -19,8 +19,8 @@ use crate::connections::ConnectionManager;
 use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
 use crate::panels::{
     AssistantPanel, ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, ExplorerPanel,
-    HistoryPanel, InspectorPanel, ResultsPanel, SavedPanel, SchemaGraphPanel, SettingsPanel,
-    WelcomePanel, WorkspacePanel, confirm_reset_general,
+    HistoryPanel, InspectorPanel, ReportPanel, ResultsPanel, SavedPanel, SchemaGraphPanel,
+    SettingsPanel, WelcomePanel, WorkspacePanel, confirm_reset_general,
 };
 use crate::perf_hud::PerfHud;
 use crate::persist::{self, LAYOUT_VERSION, LayoutProblem, WindowGeometry};
@@ -558,6 +558,26 @@ impl Workspace {
         self.show_left::<SavedPanel>(window, cx)
     }
 
+    /// Open a new report tab for saved query `row` (several per query are fine).
+    pub fn open_report(
+        &mut self,
+        row: &storage::SavedQueryRow,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<ReportPanel> {
+        let panel = ReportPanel::new(row.clone(), window, cx);
+        self.dock.update(cx, |dock, cx| {
+            dock.add_panel_view(
+                panel_handle(panel.clone()),
+                DockPlacement::Center,
+                None,
+                window,
+                cx,
+            );
+        });
+        panel
+    }
+
     /// Open saved query `row`: focus the tab already showing it, or open a new one.
     pub fn open_saved(
         &mut self,
@@ -610,8 +630,7 @@ impl Workspace {
             if connection.is_some() {
                 tab.set_connection(connection, cx);
             }
-            let editor = tab.editor().clone();
-            editor.update(cx, |e, cx| e.set_text(&text, window, cx));
+            tab.set_text(&text, window, cx);
         });
         tab
     }
@@ -634,7 +653,10 @@ impl Workspace {
             editor.update(cx, |e, cx| {
                 e.set_text(&text, window, cx);
                 e.state().update(cx, |s, cx| s.set_selected_range(0..0, cx));
-                e.run(&crate::actions::editor::RunQuery, window, cx);
+            });
+            tab.refresh_params(cx);
+            editor.update(cx, |e, cx| {
+                e.run(&crate::actions::editor::RunQuery, window, cx)
             });
         });
         tab

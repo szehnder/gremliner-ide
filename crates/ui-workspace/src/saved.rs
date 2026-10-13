@@ -27,6 +27,76 @@ pub struct TabSettings {
     pub fetch_edges: Option<bool>,
     /// Results view to show first: `graph`, `table`, `json` or `console`.
     pub default_view: Option<String>,
+    /// Parameter values, defaults and labels (query-parameters).
+    pub parameters: Vec<ParamDef>,
+}
+
+/// One query parameter's state: the value typed now, a saved default and a display label.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ParamDef {
+    pub name: String,
+    pub value: String,
+    pub default: String,
+    pub label: String,
+}
+
+impl ParamDef {
+    /// The value to bind: the typed value, else the default.
+    pub fn effective(&self) -> Option<&str> {
+        [self.value.as_str(), self.default.as_str()]
+            .into_iter()
+            .find(|v| !v.trim().is_empty())
+    }
+
+    pub fn display(&self) -> &str {
+        if self.label.trim().is_empty() {
+            &self.name
+        } else {
+            &self.label
+        }
+    }
+}
+
+impl TabSettings {
+    pub fn param(&self, name: &str) -> Option<&ParamDef> {
+        self.parameters.iter().find(|p| p.name == name)
+    }
+
+    pub fn param_mut(&mut self, name: &str) -> &mut ParamDef {
+        if let Some(i) = self.parameters.iter().position(|p| p.name == name) {
+            return &mut self.parameters[i];
+        }
+        self.parameters.push(ParamDef {
+            name: name.to_owned(),
+            ..Default::default()
+        });
+        self.parameters.last_mut().expect("just pushed")
+    }
+
+    /// Bindings for the parameters `text` uses, or the names that have no value and no default.
+    pub fn bindings(
+        &self,
+        text: &str,
+        schema: Option<&schema::Schema>,
+    ) -> Result<Vec<(String, gremlin_model::GValue)>, Vec<String>> {
+        let mut out = Vec::new();
+        let mut missing = Vec::new();
+        for name in gremlin_syntax::params::parameters(text) {
+            match self.param(&name).and_then(ParamDef::effective) {
+                Some(v) => {
+                    let hint = gremlin_syntax::params::hint(text, &name, schema);
+                    out.push((name, gremlin_syntax::params::parse_value(v, hint)));
+                }
+                None => missing.push(name),
+            }
+        }
+        if missing.is_empty() {
+            Ok(out)
+        } else {
+            Err(missing)
+        }
+    }
 }
 
 impl TabSettings {

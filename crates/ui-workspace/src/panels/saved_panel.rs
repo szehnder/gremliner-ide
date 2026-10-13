@@ -218,6 +218,31 @@ impl SavedPanel {
                     .invisible()
                     .group_hover("saved-row", |s| s.visible())
                     .child(
+                        Button::new(SharedString::from(format!("saved-report-{id}")))
+                            .icon(IconName::Play)
+                            .ghost()
+                            .xsmall()
+                            .tooltip("Run as report")
+                            .on_click({
+                                let id = id.clone();
+                                move |_, window, cx| {
+                                    cx.stop_propagation();
+                                    let Some(row) =
+                                        SavedLibrary::global(cx).read(cx).query(&id).cloned()
+                                    else {
+                                        return;
+                                    };
+                                    window.defer(cx, move |window, cx| {
+                                        if let Some(ws) = crate::Workspace::for_window(window, cx) {
+                                            ws.update(cx, |ws, cx| {
+                                                ws.open_report(&row, window, cx)
+                                            });
+                                        }
+                                    });
+                                }
+                            }),
+                    )
+                    .child(
                         Button::new(SharedString::from(format!("saved-rename-q-{id}")))
                             .icon(IconName::Replace)
                             .ghost()

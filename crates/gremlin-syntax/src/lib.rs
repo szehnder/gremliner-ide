@@ -9,6 +9,7 @@ pub mod document;
 pub mod explorer;
 pub mod format;
 pub mod language;
+pub mod params;
 pub mod profile_match;
 
 pub use catalogue::{Catalogue, StepInfo, StepKind, documentation};

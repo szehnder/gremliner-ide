@@ -27,8 +27,12 @@ use crate::connections::style::{color_tag_color, environment_badge};
 use crate::saved::{SaveQueryForm, SavedLibrary, TabSettings};
 use crate::settings::AppSettings;
 use crate::theme::Tokens;
+use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
 use ui_assistant::{Disclosure, OpenPromptBar, PromptBar, PromptBarEvent};
+
+/// Documents smaller than this have their parameters detected inline.
+const PARAMS_INLINE_BYTES: usize = 64 * 1024;
 
 /// How long edits settle before a tab is written.
 const SAVE_DEBOUNCE: Duration = Duration::from_millis(500);
@@ -150,6 +154,15 @@ impl EditorTabs {
     }
 }
 
+/// The panel inputs of one parameter.
+struct ParamInputs {
+    name: String,
+    value: Entity<InputState>,
+    default: Entity<InputState>,
+    label: Entity<InputState>,
+    _subscriptions: Vec<Subscription>,
+}
+
 pub struct EditorPanel {
     id: Uuid,
     title: SharedString,
@@ -165,6 +178,11 @@ pub struct EditorPanel {
     /// The saved query this tab was opened from or saved as.
     saved_query_id: Option<String>,
     settings: TabSettings,
+    /// Parameters the text uses, and their inputs (value, default, label).
+    param_names: Vec<String>,
+    param_inputs: Vec<ParamInputs>,
+    /// Parameter detection for a large document, running in the background (replaced on each edit).
+    params_task: Option<Task<()>>,
     /// The debug session on this tab, while one runs.
     debug: Option<Entity<DebugView>>,
     _debug_subscription: Option<Subscription>,
@@ -230,12 +248,13 @@ impl EditorPanel {
             });
             let manager = ConnectionManager::global(cx);
             let mut subscriptions = vec![
-                cx.subscribe(
+                cx.subscribe_in(
                     &editor,
-                    |this: &mut Self, _, event: &QueryEditorEvent, cx| match event {
+                    window,
+                    |this: &mut Self, _, event: &QueryEditorEvent, window, cx| match event {
                         QueryEditorEvent::Changed => this.on_changed(cx),
                         QueryEditorEvent::RunRequested { text, range, mode } => {
-                            this.on_run(text.clone(), range.clone(), *mode, cx);
+                            this.on_run(text.clone(), range.clone(), *mode, window, cx);
                         }
                     },
                 ),
@@ -274,6 +293,9 @@ impl EditorPanel {
                 save_task: None,
                 prompt: None,
                 prompt_task: None,
+                param_names: gremlin_syntax::params::parameters(&row.content),
+                param_inputs: Vec::new(),
+                params_task: None,
                 debug: None,
                 _debug_subscription: None,
                 focus_handle: cx.focus_handle(),
@@ -430,7 +452,196 @@ impl EditorPanel {
         cx.notify();
     }
 
+    /// Parameters detected in the tab's text, in order of first appearance.
+    pub fn parameter_names(&self) -> &[String] {
+        &self.param_names
+    }
+
+    /// Set a parameter's value (as typed in the panel), updating its input.
+    pub fn set_param_value(
+        &mut self,
+        name: &str,
+        value: &str,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.settings.param_mut(name).value = value.to_owned();
+        if let Some(inputs) = self.param_inputs.iter().find(|p| p.name == name) {
+            let v = value.to_owned();
+            inputs.value.update(cx, |s, cx| s.set_value(v, window, cx));
+        }
+        self.schedule_save(cx);
+        cx.notify();
+    }
+
+    /// Create inputs for newly detected parameters (render time, which has a window).
+    fn ensure_param_inputs(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        for name in self.param_names.clone() {
+            if self.param_inputs.iter().any(|p| p.name == name) {
+                continue;
+            }
+            let def = self.settings.param(&name).cloned().unwrap_or_default();
+            let make = |value: &str,
+                        placeholder: &str,
+                        window: &mut Window,
+                        cx: &mut Context<'_, Self>| {
+                let value = value.to_owned();
+                let placeholder = placeholder.to_owned();
+                cx.new(|cx| {
+                    InputState::new(window, cx)
+                        .placeholder(placeholder)
+                        .default_value(value)
+                })
+            };
+            let inputs = ParamInputs {
+                name: name.clone(),
+                value: make(&def.value, "value", window, cx),
+                default: make(&def.default, "default", window, cx),
+                label: make(&def.label, "label", window, cx),
+                _subscriptions: Vec::new(),
+            };
+            let mut subs = Vec::new();
+            for (which, input) in [(0, &inputs.value), (1, &inputs.default), (2, &inputs.label)] {
+                let name = name.clone();
+                subs.push(cx.subscribe(
+                    input,
+                    move |this: &mut Self, input, e: &InputEvent, cx| {
+                        if !matches!(e, InputEvent::Change) {
+                            return;
+                        }
+                        let text = input.read(cx).value().to_string();
+                        let def = this.settings.param_mut(&name);
+                        match which {
+                            0 => def.value = text,
+                            1 => def.default = text,
+                            _ => def.label = text,
+                        }
+                        this.schedule_save(cx);
+                    },
+                ));
+            }
+            self.param_inputs.push(ParamInputs {
+                _subscriptions: subs,
+                ..inputs
+            });
+        }
+    }
+
+    fn params_strip(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Option<AnyElement> {
+        if self.param_names.is_empty() {
+            return None;
+        }
+        self.ensure_param_inputs(window, cx);
+        let theme = cx.theme().clone();
+        let schema = self.connection_id.and_then(|id| {
+            crate::schema::SchemaRegistry::try_global(cx)?
+                .read(cx)
+                .schema(id)
+        });
+        let text = self.editor.read(cx).text(cx);
+        let rows = self.param_names.iter().filter_map(|name| {
+            let inputs = self.param_inputs.iter().find(|p| &p.name == name)?;
+            let hint = gremlin_syntax::params::hint(&text, name, schema.as_deref());
+            Some(
+                h_flex()
+                    .id(SharedString::from(format!("param-row-{name}")))
+                    .test_support()
+                    .gap(Tokens::space(2.0))
+                    .child(
+                        div()
+                            .w(Tokens::size(96.0))
+                            .truncate()
+                            .font_family(ui_theme::fonts::MONO_FONT_FAMILY)
+                            .text_size(Tokens::text_sm())
+                            .text_color(theme.foreground)
+                            .child(name.clone()),
+                    )
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("param-value-{name}")))
+                            .test_support()
+                            .w(Tokens::size(180.0))
+                            .child(Input::new(&inputs.value).small()),
+                    )
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("param-default-{name}")))
+                            .test_support()
+                            .w(Tokens::size(120.0))
+                            .child(Input::new(&inputs.default).small()),
+                    )
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("param-label-{name}")))
+                            .test_support()
+                            .w(Tokens::size(140.0))
+                            .child(Input::new(&inputs.label).small()),
+                    )
+                    .children(hint.map(|h| {
+                        div()
+                            .text_size(Tokens::text_xs())
+                            .text_color(theme.muted_foreground)
+                            .child(h.label())
+                    })),
+            )
+        });
+        Some(
+            v_flex()
+                .id("params-panel")
+                .test_support()
+                .flex_none()
+                .gap(Tokens::space(1.0))
+                .px(Tokens::space(3.0))
+                .py(Tokens::space(1.5))
+                .border_b(Tokens::BORDER)
+                .border_color(theme.border)
+                .child(
+                    div()
+                        .text_size(Tokens::text_xs())
+                        .text_color(theme.muted_foreground)
+                        .child("Parameters (JSON values: 10, true, \"text\"; sent as bindings)"),
+                )
+                .children(rows)
+                .into_any_element(),
+        )
+    }
+
+    /// Detect the parameters in the current text (after edits and programmatic changes).
+    /// Small documents are analysed inline; larger ones on the background executor, so typing in a
+    /// large file never waits for a full re-parse (the editor's own analysis does the same).
+    pub fn refresh_params(&mut self, cx: &mut Context<'_, Self>) {
+        let text = self.editor.read(cx).text(cx);
+        if text.len() < PARAMS_INLINE_BYTES {
+            self.params_task = None;
+            self.apply_params(gremlin_syntax::params::parameters(&text), cx);
+            return;
+        }
+        let task = cx.background_spawn(async move { gremlin_syntax::params::parameters(&text) });
+        self.params_task = Some(cx.spawn(async move |this, cx| {
+            let names = task.await;
+            let _ = this.update(cx, |this, cx| this.apply_params(names, cx));
+        }));
+    }
+
+    fn apply_params(&mut self, names: Vec<String>, cx: &mut Context<'_, Self>) {
+        if names != self.param_names {
+            self.param_names = names;
+            cx.notify();
+        }
+    }
+
+    /// Replace the text (opening a query), keeping parameters and the dirty marker in step.
+    pub fn set_text(&mut self, text: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.editor.update(cx, |e, cx| e.set_text(text, window, cx));
+        self.on_changed(cx);
+    }
+
     fn on_changed(&mut self, cx: &mut Context<'_, Self>) {
+        self.refresh_params(cx);
         let dirty = self.editor.read(cx).text(cx) != self.saved_text;
         if dirty != self.dirty {
             self.dirty = dirty;
@@ -444,8 +655,21 @@ impl EditorPanel {
         text: String,
         range: Range<usize>,
         mode: ui_editor::RunMode,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        let schema = self.connection_id.and_then(|id| {
+            crate::schema::SchemaRegistry::try_global(cx)?
+                .read(cx)
+                .schema(id)
+        });
+        let bindings = match self.settings.bindings(&text, schema.as_deref()) {
+            Ok(b) => b,
+            Err(missing) => {
+                self.prompt_for(missing, text, range, mode, window, cx);
+                return;
+            }
+        };
         let request = RunRequest {
             tab_id: self.id,
             connection_id: self.connection_id,
@@ -453,7 +677,7 @@ impl EditorPanel {
             range,
             mode,
             generated: false,
-            bindings: Vec::new(),
+            bindings,
             settings: self.settings.clone(),
         };
         if let Some(id) = self.connection_id {
@@ -474,6 +698,103 @@ impl EditorPanel {
             connection_id: self.connection_id.map(|c| c.to_string()),
             saved_query_id: self.saved_query_id.clone(),
             settings: Some(self.settings.to_json()),
+        }
+    }
+
+    /// Ask for parameters that have neither a value nor a default, then run.
+    fn prompt_for(
+        &mut self,
+        missing: Vec<String>,
+        text: String,
+        range: Range<usize>,
+        mode: ui_editor::RunMode,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let fields: Vec<(String, String, Entity<InputState>)> = missing
+            .iter()
+            .map(|name| {
+                let label = self
+                    .settings
+                    .param(name)
+                    .map(|p| p.display().to_owned())
+                    .unwrap_or_else(|| name.clone());
+                let input = cx.new(|cx| InputState::new(window, cx).placeholder("value"));
+                (name.clone(), label, input)
+            })
+            .collect();
+        let tab = cx.entity().downgrade();
+        let first = fields.first().map(|f| f.2.clone());
+        window.open_dialog(cx, move |dialog, _, cx| {
+            let theme = cx.theme().clone();
+            let fields = fields.clone();
+            let ok_fields = fields.clone();
+            let tab = tab.clone();
+            let (text, range) = (text.clone(), range.clone());
+            dialog
+                .title("Values for this query")
+                .w(Tokens::SHORTCUTS_WIDTH)
+                .margin_top(Tokens::DIALOG_TOP)
+                .child(
+                    v_flex()
+                        .id("param-prompt")
+                        .test_support()
+                        .gap(Tokens::space(3.0))
+                        .children(fields.iter().map(|(name, label, input)| {
+                            v_flex()
+                                .id(SharedString::from(format!("param-prompt-{name}")))
+                                .test_support()
+                                .gap(Tokens::space(1.0))
+                                .child(
+                                    div()
+                                        .text_size(Tokens::text_sm())
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .text_color(theme.foreground)
+                                        .child(label.clone()),
+                                )
+                                .child(Input::new(input))
+                        }))
+                        .child(
+                            h_flex()
+                                .justify_end()
+                                .gap(Tokens::space(2.0))
+                                .child(
+                                    Button::new("param-prompt-cancel")
+                                        .label("Cancel")
+                                        .ghost()
+                                        .on_click(|_, window, cx| window.close_dialog(cx)),
+                                )
+                                .child(
+                                    Button::new("param-prompt-ok")
+                                        .label("Run")
+                                        .primary()
+                                        .on_click(move |_, window, cx| {
+                                            let values: Vec<(String, String)> = ok_fields
+                                                .iter()
+                                                .map(|(n, _, i)| {
+                                                    (n.clone(), i.read(cx).value().to_string())
+                                                })
+                                                .collect();
+                                            if values.iter().any(|(_, v)| v.trim().is_empty()) {
+                                                return;
+                                            }
+                                            window.close_dialog(cx);
+                                            let (text, range) = (text.clone(), range.clone());
+                                            let _ = tab.update(cx, |t, cx| {
+                                                for (n, v) in &values {
+                                                    t.set_param_value(n, v, window, cx);
+                                                }
+                                                t.on_run(text, range, mode, window, cx);
+                                            });
+                                        }),
+                                ),
+                        ),
+                )
+        });
+        if let Some(first) = first {
+            window.defer(cx, move |window, cx| {
+                first.update(cx, |i, cx| i.focus(window, cx))
+            });
         }
     }
 
@@ -562,6 +883,7 @@ impl EditorPanel {
         let text = row.text.clone();
         self.editor
             .update(cx, |e, cx| e.set_text(&text, window, cx));
+        self.refresh_params(cx);
         self.saved_text = row.text.clone();
         self.dirty = false;
         self.save_now(cx);
@@ -761,7 +1083,8 @@ impl Panel for EditorPanel {
 }
 
 impl Render for EditorPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+        let params = self.params_strip(window, cx);
         let theme = cx.theme().clone();
         let toolbar = h_flex()
             .id("editor-toolbar")
@@ -861,6 +1184,7 @@ impl Render for EditorPanel {
             }))
             .child(toolbar)
             .children(self.prompt.clone())
+            .children(params)
             .child(div().flex_1().min_h_0().child(self.editor.clone()))
             .children(
                 self.debug

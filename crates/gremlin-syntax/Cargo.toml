@@ -15,6 +15,7 @@ serde.workspace = true
 toml.workspace = true
 schema.workspace = true
 gremlin-model.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
