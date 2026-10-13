@@ -22,6 +22,8 @@ actions!(
         CancelQuery,
         SplitRight,
         SaveQuery,
+        ShowHistory,
+        ShowSavedQueries,
         ResetGeneralSettings,
         Quit,
     ]

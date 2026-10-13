@@ -461,14 +461,21 @@ impl Runner {
             ),
         };
         let cap = AppSettings::general(cx).result_limit.max(1);
+        let preferred_view = request
+            .settings
+            .default_view
+            .as_deref()
+            .and_then(ui_results::ViewKind::from_id);
         let result = cx.new(|_| {
-            ResultSet::new(
+            let mut r = ResultSet::new(
                 run_id,
                 request.text.clone(),
                 sent.clone(),
                 config.name.clone(),
                 cap,
-            )
+            );
+            r.preferred_view = preferred_view;
+            r
         });
         self.latest = Some(result.clone());
         self.latest_tab = Some(request.tab_id);
@@ -477,7 +484,13 @@ impl Runner {
         self.ensure_graph(request.tab_id, window, cx);
         if let Some(graph) = self.graphs.get(&request.tab_id) {
             let conn = connection_id.to_string();
-            graph.update(cx, |g, cx| g.set_connection(&conn, cx));
+            let fetch_edges = request.settings.fetch_edges;
+            graph.update(cx, |g, cx| {
+                g.set_connection(&conn, cx);
+                if let Some(fetch) = fetch_edges {
+                    g.set_edges_between(fetch, cx);
+                }
+            });
         }
         let (cancel_tx, cancel_rx) = oneshot::channel();
         self.running = Some(Running {
@@ -488,10 +501,23 @@ impl Runner {
         cx.emit(RunnerEvent::RunningChanged);
         cx.notify();
 
-        let timeout = Duration::from_millis(config.timeout_ms);
+        let timeout =
+            Duration::from_millis(request.settings.timeout_ms.unwrap_or(config.timeout_ms));
+        let started_at = crate::saved::HistoryLog::now_ms();
+        let history = (!request.generated).then(|| (request.text.clone(), config.name.clone()));
         if request.mode != RunMode::Run {
             drop(cancel_rx);
-            self.run_analysis(run_id, result, request, connection_id, timeout, window, cx);
+            self.run_analysis(
+                run_id,
+                result,
+                request,
+                connection_id,
+                timeout,
+                history,
+                started_at,
+                window,
+                cx,
+            );
             return;
         }
         let base = request.range.start;
@@ -562,6 +588,10 @@ impl Runner {
             drop(io);
             result.update(cx, |r, cx| r.finish(RunStatus::Cancelled, cx));
             let _ = this.update(cx, |this, cx| this.clear_running(run_id, cx));
+            if let Some((text, name)) = history {
+                let _ =
+                    cx.update(|_, cx| record(&result, text, connection_id, name, started_at, cx));
+            }
             let labels = result.read_with(cx, |r, _| result_labels(&r.items));
             if !labels.is_empty() {
                 let _ = cx.update(|_, cx| {
@@ -600,6 +630,8 @@ impl Runner {
         request: RunRequest,
         connection_id: Uuid,
         timeout: Duration,
+        history: Option<(String, String)>,
+        started_at: i64,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
@@ -675,6 +707,10 @@ impl Runner {
                 Err(_) => result.update(cx, |r, cx| r.finish(RunStatus::Cancelled, cx)),
             }
             let _ = this.update(cx, |this, cx| this.clear_running(run_id, cx));
+            if let Some((text, name)) = history {
+                let _ =
+                    cx.update(|_, cx| record(&result, text, connection_id, name, started_at, cx));
+            }
         })
         .detach();
     }
@@ -738,6 +774,38 @@ async fn stream(
             },
         }
     }
+}
+
+/// Write a finished run to the query history.
+fn record(
+    result: &Entity<ResultSet>,
+    text: String,
+    connection_id: Uuid,
+    connection_name: String,
+    started_at: i64,
+    cx: &mut App,
+) {
+    let entry = {
+        let r = result.read(cx);
+        let (outcome, error) = match &r.status {
+            RunStatus::Succeeded => (storage::Outcome::Success, None),
+            RunStatus::Cancelled => (storage::Outcome::Cancelled, None),
+            RunStatus::Failed(e) => (storage::Outcome::Error, Some(e.message.clone())),
+            RunStatus::Running => return,
+        };
+        storage::HistoryEntry {
+            id: 0,
+            connection_id: Some(connection_id.to_string()),
+            connection_name,
+            text,
+            started_at,
+            duration_ms: r.elapsed_so_far().as_millis() as i64,
+            outcome,
+            count: r.items.len() as i64,
+            error,
+        }
+    };
+    crate::saved::HistoryLog::record(entry, cx);
 }
 
 /// `ui_state` key of a tab's graph layout settings.

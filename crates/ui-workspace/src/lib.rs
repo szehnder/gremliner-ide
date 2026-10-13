@@ -14,6 +14,7 @@ pub mod panels;
 pub mod perf_hud;
 pub mod persist;
 pub mod run;
+pub mod saved;
 pub mod schema;
 pub mod settings;
 pub mod status_bar;
@@ -77,7 +78,9 @@ pub fn init(config: ShellConfig, cx: &mut App) {
     let secrets = config
         .secrets
         .unwrap_or_else(|| std::sync::Arc::new(storage::secrets::LazyStore::default()));
+    saved::HistoryLog::init(cx);
     if let Some(db) = connection_db {
+        saved::SavedLibrary::init(db.clone(), cx);
         ai::LlmProfiles::init(db.clone(), secrets.clone(), cx);
         connections::ConnectionManager::init(db, Some(secrets), cx);
     }
@@ -151,6 +154,10 @@ fn register_commands(cx: &mut App) {
             .when(When::EditorOpen),
         CommandMeta::new("Editor", "Split Right", SplitRight).when(When::EditorOpen),
         CommandMeta::new("Editor", "Save Query", SaveQuery).when(When::EditorOpen),
+        CommandMeta::new("View", "Show Query History", ShowHistory)
+            .keywords(&["recent", "past", "log"]),
+        CommandMeta::new("View", "Show Saved Queries", ShowSavedQueries)
+            .keywords(&["library", "folders"]),
         CommandMeta::new("Graph", "Expand Neighbours", graph::ExpandSelection)
             .when(When::GraphFocused),
         CommandMeta::new("Graph", "Hide Selection", graph::HideSelection).when(When::GraphFocused),

@@ -67,6 +67,8 @@ pub struct ResultSet {
     pub server_time: Option<Duration>,
     /// Profile or explain report (profile and explain runs).
     pub analysis: Option<Analysis>,
+    /// The view to show first (a tab setting), instead of choosing by the result's shape.
+    pub preferred_view: Option<crate::ViewKind>,
 }
 
 impl EventEmitter<ResultSetEvent> for ResultSet {}
@@ -95,6 +97,7 @@ impl ResultSet {
             elapsed: None,
             server_time: None,
             analysis: None,
+            preferred_view: None,
         }
     }
 

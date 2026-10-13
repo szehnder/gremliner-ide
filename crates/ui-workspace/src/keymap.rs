@@ -28,6 +28,7 @@ pub fn bind_default_keys(cx: &mut App) {
         KeyBinding::new("secondary-q", Quit, None),
         KeyBinding::new("secondary-t", NewQueryTab, None),
         KeyBinding::new("secondary-s", SaveQuery, None),
+        KeyBinding::new("secondary-shift-h", ShowHistory, None),
         KeyBinding::new("secondary-\\", SplitRight, None),
         // Inside the editor these must beat the text input's own bindings (Ctrl+Enter inserts a newline,
         // Ctrl+/ is the global shortcuts key), so they bind in the more specific context.

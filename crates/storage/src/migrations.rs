@@ -58,6 +58,45 @@ const MIGRATIONS: &[&str] = &[
         position INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
     );",
+    // 7: query history with a trigram full-text index for substring search.
+    "CREATE TABLE history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        connection_id TEXT,
+        connection_name TEXT NOT NULL,
+        text TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        outcome TEXT NOT NULL,
+        count INTEGER NOT NULL,
+        error TEXT
+    );
+    CREATE INDEX history_started ON history(started_at);
+    CREATE VIRTUAL TABLE history_fts USING fts5(text, content='history', content_rowid='id', tokenize='trigram');
+    CREATE TRIGGER history_ai AFTER INSERT ON history BEGIN
+        INSERT INTO history_fts(rowid, text) VALUES (new.id, new.text);
+    END;
+    CREATE TRIGGER history_ad AFTER DELETE ON history BEGIN
+        INSERT INTO history_fts(history_fts, rowid, text) VALUES ('delete', old.id, old.text);
+    END;",
+    // 8: saved queries in nested folders, and the saved query a tab was opened from (with tab settings).
+    "CREATE TABLE folders (
+        id TEXT PRIMARY KEY NOT NULL,
+        parent_id TEXT,
+        connection_id TEXT,
+        name TEXT NOT NULL,
+        sort INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE saved_queries (
+        id TEXT PRIMARY KEY NOT NULL,
+        folder_id TEXT,
+        connection_id TEXT,
+        name TEXT NOT NULL,
+        text TEXT NOT NULL,
+        settings TEXT NOT NULL DEFAULT '{}',
+        updated_at INTEGER NOT NULL
+    );
+    ALTER TABLE open_tabs ADD COLUMN saved_query_id TEXT;
+    ALTER TABLE open_tabs ADD COLUMN settings TEXT;",
 ];
 
 /// The schema version after every migration has run.

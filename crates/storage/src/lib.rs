@@ -6,14 +6,18 @@
 //! `*_blocking` variants exist only for startup, before the first frame, and for tests.
 
 mod connections;
+mod history;
 mod llm_profiles;
 mod migrations;
+mod saved;
 mod schema_cache;
 pub mod secrets;
 mod stylesheets;
 mod tabs;
 
+pub use history::{DEFAULT_HISTORY_LIMIT, HistoryEntry, HistoryQuery, Outcome};
 pub use llm_profiles::LlmProfileRow;
+pub use saved::{FolderRow, SavedQueryRow};
 pub use schema_cache::CachedSchema;
 pub use stylesheets::StylesheetRow;
 

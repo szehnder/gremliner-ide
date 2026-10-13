@@ -160,6 +160,32 @@ fn general_page() -> SettingPage {
                     )
                     .description("Queries stop collecting results after this many items."),
                 )
+                .item(
+                    SettingItem::new(
+                        "History size",
+                        SettingField::number_input(
+                            NumberFieldOptions {
+                                min: 100.0,
+                                max: 1_000_000.0,
+                                step: 1000.0,
+                            },
+                            #[allow(clippy::cast_precision_loss)]
+                            |cx| AppSettings::general(cx).history_limit as f64,
+                            |value, cx| {
+                                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                                let value = value.max(100.0) as usize;
+                                AppSettings::update_general(cx, |g| g.history_limit = value);
+                            },
+                        )
+                        .default_value(
+                            #[allow(clippy::cast_precision_loss)]
+                            {
+                                storage::DEFAULT_HISTORY_LIMIT as f64
+                            },
+                        ),
+                    )
+                    .description("Queries kept in the history; the oldest are removed first."),
+                )
                 .item(SettingItem::new(
                     "Editor font size",
                     font_size_field(

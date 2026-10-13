@@ -24,6 +24,7 @@ use crate::actions::debug::{StartDebug, StepBack, StepInto, StepOut, StepOver, S
 use crate::actions::editor::{ExplainQuery, FormatQuery, ProfileQuery, RunQuery};
 use crate::connections::ConnectionManager;
 use crate::connections::style::{color_tag_color, environment_badge};
+use crate::saved::{SaveQueryForm, SavedLibrary, TabSettings};
 use crate::settings::AppSettings;
 use crate::theme::Tokens;
 use gpui_kit::component::notification::Notification;
@@ -45,6 +46,8 @@ pub struct RunRequest {
     pub generated: bool,
     /// Values for the script's parameters (ADR-0030).
     pub bindings: Vec<(String, gremlin_model::GValue)>,
+    /// The tab's settings (timeout, fetch edges, first view).
+    pub settings: crate::saved::TabSettings,
 }
 
 #[derive(Debug, Clone)]
@@ -131,9 +134,11 @@ impl EditorTabs {
         cx.notify();
     }
 
-    fn remove(&mut self, id: Uuid, cx: &mut Context<'_, Self>) {
+    /// Forget a tab. Called from the tab's own `on_removed`, while it is being updated, so it is
+    /// matched by entity id rather than read.
+    fn remove(&mut self, tab: EntityId, cx: &mut Context<'_, Self>) {
         self.tabs
-            .retain(|t| t.upgrade().is_some_and(|t| t.read(cx).id != id));
+            .retain(|t| t.entity_id() != tab && t.upgrade().is_some());
         cx.emit(EditorTabsEvent::TabsChanged);
         cx.notify();
     }
@@ -157,6 +162,9 @@ pub struct EditorPanel {
     /// The assistant prompt bar, while open.
     prompt: Option<Entity<PromptBar>>,
     prompt_task: Option<Task<()>>,
+    /// The saved query this tab was opened from or saved as.
+    saved_query_id: Option<String>,
+    settings: TabSettings,
     /// The debug session on this tab, while one runs.
     debug: Option<Entity<DebugView>>,
     _debug_subscription: Option<Subscription>,
@@ -189,6 +197,8 @@ impl EditorPanel {
             content: String::new(),
             cursor: 0,
             connection_id: connection.map(|c| c.to_string()),
+            saved_query_id: None,
+            settings: None,
         };
         Self::from_row(row, window, cx)
     }
@@ -203,6 +213,8 @@ impl EditorPanel {
                 content: String::new(),
                 cursor: 0,
                 connection_id: None,
+                saved_query_id: None,
+                settings: None,
             });
         Self::from_row(row, window, cx)
     }
@@ -234,6 +246,18 @@ impl EditorPanel {
                     .push(cx.observe(&registry, |this: &mut Self, _, cx| this.sync_schema(cx)));
             }
             let id = Uuid::parse_str(&row.id).unwrap_or_else(|_| Uuid::new_v4());
+            // A tab linked to a saved query is dirty when it differs from the saved version.
+            let saved_query_id = row.saved_query_id.clone().filter(|q| {
+                SavedLibrary::try_global(cx).is_some_and(|l| l.read(cx).query(q).is_some())
+            });
+            let saved_text = saved_query_id
+                .as_ref()
+                .and_then(|q| {
+                    SavedLibrary::try_global(cx)
+                        .and_then(|l| l.read(cx).query(q).map(|q| q.text.clone()))
+                })
+                .unwrap_or_else(|| row.content.clone());
+            let dirty = saved_text != row.content;
             Self {
                 id,
                 title: row.title.clone().into(),
@@ -242,8 +266,10 @@ impl EditorPanel {
                     .connection_id
                     .as_deref()
                     .and_then(|c| Uuid::parse_str(c).ok()),
-                saved_text: row.content.clone(),
-                dirty: false,
+                saved_text,
+                dirty,
+                saved_query_id,
+                settings: TabSettings::from_json(row.settings.as_deref()),
                 storage,
                 save_task: None,
                 prompt: None,
@@ -428,6 +454,7 @@ impl EditorPanel {
             mode,
             generated: false,
             bindings: Vec::new(),
+            settings: self.settings.clone(),
         };
         if let Some(id) = self.connection_id {
             ConnectionManager::global(cx).update(cx, |m, cx| m.set_active(Some(id), cx));
@@ -445,7 +472,163 @@ impl EditorPanel {
             content: self.editor.read(cx).text(cx),
             cursor: self.editor.read(cx).cursor(cx),
             connection_id: self.connection_id.map(|c| c.to_string()),
+            saved_query_id: self.saved_query_id.clone(),
+            settings: Some(self.settings.to_json()),
         }
+    }
+
+    pub fn title(&self) -> SharedString {
+        self.title.clone()
+    }
+
+    pub fn saved_query_id(&self) -> Option<&str> {
+        self.saved_query_id.as_deref()
+    }
+
+    pub fn settings(&self) -> &TabSettings {
+        &self.settings
+    }
+
+    pub fn set_settings(&mut self, settings: TabSettings, cx: &mut Context<'_, Self>) {
+        self.settings = settings;
+        self.schedule_save(cx);
+        cx.notify();
+    }
+
+    /// Ctrl/Cmd+S: update the saved query this tab came from, or ask for a name and folder.
+    pub fn save(tab: &Entity<Self>, window: &mut Window, cx: &mut App) {
+        let library = SavedLibrary::global(cx);
+        let linked = tab
+            .read(cx)
+            .saved_query_id
+            .clone()
+            .filter(|id| library.read(cx).query(id).is_some());
+        match linked {
+            Some(id) => {
+                let (text, settings) = {
+                    let t = tab.read(cx);
+                    (t.editor.read(cx).text(cx), t.settings.clone())
+                };
+                library.update(cx, |l, cx| l.update_query(&id, &text, &settings, cx));
+                tab.update(cx, |t, cx| {
+                    t.mark_saved(cx);
+                    t.save_now(cx);
+                });
+            }
+            None => {
+                SaveQueryForm::open(tab, window, cx);
+            }
+        }
+    }
+
+    /// Save into the library under `name` and link this tab to it.
+    pub fn save_as(
+        &mut self,
+        name: &str,
+        folder: Option<String>,
+        under_connection: bool,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let text = self.editor.read(cx).text(cx);
+        let connection = under_connection.then_some(self.connection_id).flatten();
+        let settings = self.settings.clone();
+        let id = SavedLibrary::global(cx).update(cx, |l, cx| {
+            l.save_new(name, folder, connection, &text, &settings, cx)
+        });
+        self.saved_query_id = Some(id);
+        self.title = name.trim().to_owned().into();
+        self.mark_saved(cx);
+        self.save_now(cx);
+    }
+
+    /// Link this tab to saved query `row` (opening it from the library).
+    pub fn load_saved(
+        &mut self,
+        row: &storage::SavedQueryRow,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.saved_query_id = Some(row.id.clone());
+        self.title = row.name.clone().into();
+        self.settings = TabSettings::from_json(Some(&row.settings));
+        if let Some(conn) = row
+            .connection_id
+            .as_deref()
+            .and_then(|c| Uuid::parse_str(c).ok())
+        {
+            self.connection_id = Some(conn);
+            self.sync_schema(cx);
+        }
+        let text = row.text.clone();
+        self.editor
+            .update(cx, |e, cx| e.set_text(&text, window, cx));
+        self.saved_text = row.text.clone();
+        self.dirty = false;
+        self.save_now(cx);
+        cx.notify();
+    }
+
+    fn settings_menu(&self, cx: &mut Context<'_, Self>) -> impl IntoElement + use<> {
+        let settings = self.settings.clone();
+        let this = cx.entity().downgrade();
+        Button::new("editor-settings")
+            .icon(IconName::Settings)
+            .ghost()
+            .xsmall()
+            .tooltip("Tab settings")
+            .dropdown_menu(move |mut menu, _, _| {
+                let set = |f: Box<dyn Fn(&mut TabSettings)>, this: WeakEntity<EditorPanel>| {
+                    move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+                        let _ = this.update(cx, |t, cx| {
+                            let mut s = t.settings.clone();
+                            f(&mut s);
+                            t.set_settings(s, cx);
+                        });
+                    }
+                };
+                menu = menu.label("Timeout");
+                for (label, ms) in [
+                    ("Connection default", None),
+                    ("5 seconds", Some(5_000)),
+                    ("10 seconds", Some(10_000)),
+                    ("30 seconds", Some(30_000)),
+                    ("1 minute", Some(60_000)),
+                    ("5 minutes", Some(300_000)),
+                ] {
+                    menu = menu.item(
+                        PopupMenuItem::new(label)
+                            .checked(settings.timeout_ms == ms)
+                            .on_click(set(Box::new(move |s| s.timeout_ms = ms), this.clone())),
+                    );
+                }
+                let fetch = settings.fetch_edges.unwrap_or(true);
+                menu = menu.separator().item(
+                    PopupMenuItem::new("Fetch edges between vertices")
+                        .checked(fetch)
+                        .on_click(set(
+                            Box::new(move |s| s.fetch_edges = Some(!fetch)),
+                            this.clone(),
+                        )),
+                );
+                menu = menu.separator().label("Show results as");
+                for (label, view) in [
+                    ("Automatic", None),
+                    ("Graph", Some("graph")),
+                    ("Table", Some("table")),
+                    ("JSON", Some("json")),
+                    ("Console", Some("console")),
+                ] {
+                    menu = menu.item(
+                        PopupMenuItem::new(label)
+                            .checked(settings.default_view.as_deref() == view)
+                            .on_click(set(
+                                Box::new(move |s| s.default_view = view.map(str::to_owned)),
+                                this.clone(),
+                            )),
+                    );
+                }
+                menu
+            })
     }
 
     fn schedule_save(&mut self, cx: &mut Context<'_, Self>) {
@@ -538,8 +721,8 @@ impl BasePanel for EditorPanel {
             })
             .detach();
         }
-        let id = self.id;
-        EditorTabs::global(cx).update(cx, |t, cx| t.remove(id, cx));
+        let entity = cx.entity_id();
+        EditorTabs::global(cx).update(cx, |t, cx| t.remove(entity, cx));
     }
 }
 
@@ -610,6 +793,7 @@ impl Render for EditorPanel {
                             .update(cx, |e, cx| e.format(&FormatQuery, window, cx));
                     })),
             )
+            .child(self.settings_menu(cx))
             .child(
                 Button::new("editor-debug")
                     .label("Debug")

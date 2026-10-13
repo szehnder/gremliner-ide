@@ -304,6 +304,7 @@ impl ExplorerPanel {
             mode: ui_editor::RunMode::Run,
             generated: true,
             bindings: generated.bindings,
+            settings: Default::default(),
         };
         runner.update(cx, |r, cx| r.execute(request, window, cx));
     }

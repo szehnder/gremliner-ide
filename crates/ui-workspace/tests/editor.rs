@@ -3,6 +3,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod support;
+
 use std::sync::{Arc, LazyLock};
 use std::time::Instant;
 
@@ -288,7 +290,10 @@ fn dirty_marker_tracks_unsaved_changes(cx: &mut TestAppContext) {
     cx.update(|window, cx| window.input("g.V()", cx));
     cx.run_until_parked();
     assert!(cx.update(|_, cx| tab.read(cx).is_dirty()));
+    // Ctrl+S asks for a name (the tab title by default), then saves into the library.
     cx.simulate_keystrokes("ctrl-s");
+    cx.run_until_parked();
+    support::click_settled(&mut cx, "save-query-ok");
     assert!(!cx.update(|_, cx| tab.read(cx).is_dirty()));
 }
 
@@ -393,6 +398,8 @@ fn new_tab_numbers_continue_after_restored_tabs(cx: &mut TestAppContext) {
                 content: String::new(),
                 cursor: 0,
                 connection_id: None,
+                saved_query_id: None,
+                settings: None,
             },
             window,
             cx,

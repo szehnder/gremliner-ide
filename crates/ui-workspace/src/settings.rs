@@ -19,6 +19,8 @@ pub struct GeneralSettings {
     pub editor_font_size: f32,
     /// Maximum result items collected per query.
     pub result_limit: usize,
+    /// Query history entries kept (oldest removed first).
+    pub history_limit: usize,
 }
 
 /// Default and bounds for [`GeneralSettings::result_limit`].
@@ -32,6 +34,7 @@ impl Default for GeneralSettings {
             ui_font_size: DEFAULT_UI_FONT_SIZE,
             editor_font_size: DEFAULT_EDITOR_FONT_SIZE,
             result_limit: DEFAULT_RESULT_LIMIT,
+            history_limit: storage::DEFAULT_HISTORY_LIMIT,
         }
     }
 }
@@ -41,6 +44,7 @@ impl GeneralSettings {
         self.ui_font_size = theme::clamp_font_size(self.ui_font_size);
         self.editor_font_size = theme::clamp_font_size(self.editor_font_size);
         self.result_limit = self.result_limit.clamp(1, MAX_RESULT_LIMIT);
+        self.history_limit = self.history_limit.clamp(100, 1_000_000);
         self
     }
 

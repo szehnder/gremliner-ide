@@ -13,6 +13,10 @@ pub struct TabRow {
     /// Cursor byte offset.
     pub cursor: usize,
     pub connection_id: Option<String>,
+    /// The saved query this tab was opened from or saved as.
+    pub saved_query_id: Option<String>,
+    /// Tab settings as JSON (timeout, fetch edges, default view, parameters).
+    pub settings: Option<String>,
 }
 
 impl Storage {
@@ -35,7 +39,7 @@ impl Storage {
     pub fn list_tabs_blocking(&self) -> Result<Vec<TabRow>> {
         self.call_blocking(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, title, content, cursor, connection_id FROM open_tabs ORDER BY rowid",
+                "SELECT id, title, content, cursor, connection_id, saved_query_id, settings FROM open_tabs ORDER BY rowid",
             )?;
             let rows = stmt
                 .query_map([], row_to_tab)?
@@ -64,21 +68,27 @@ fn row_to_tab(row: &rusqlite::Row<'_>) -> rusqlite::Result<TabRow> {
         content: row.get(2)?,
         cursor: usize::try_from(cursor).unwrap_or(0),
         connection_id: row.get(4)?,
+        saved_query_id: row.get(5)?,
+        settings: row.get(6)?,
     })
 }
 
 fn save(conn: &mut Connection, row: &TabRow) -> Result<()> {
     conn.execute(
-        "INSERT INTO open_tabs (id, title, content, cursor, connection_id, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, unixepoch())
+        "INSERT INTO open_tabs (id, title, content, cursor, connection_id, saved_query_id, settings, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, unixepoch())
          ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content,
-             cursor = excluded.cursor, connection_id = excluded.connection_id, updated_at = excluded.updated_at",
+             cursor = excluded.cursor, connection_id = excluded.connection_id,
+             saved_query_id = excluded.saved_query_id, settings = excluded.settings,
+             updated_at = excluded.updated_at",
         params![
             row.id,
             row.title,
             row.content,
             i64::try_from(row.cursor).unwrap_or(i64::MAX),
-            row.connection_id
+            row.connection_id,
+            row.saved_query_id,
+            row.settings
         ],
     )?;
     Ok(())
@@ -87,7 +97,7 @@ fn save(conn: &mut Connection, row: &TabRow) -> Result<()> {
 fn load(conn: &mut Connection, id: &str) -> Result<Option<TabRow>> {
     Ok(conn
         .query_row(
-            "SELECT id, title, content, cursor, connection_id FROM open_tabs WHERE id = ?1",
+            "SELECT id, title, content, cursor, connection_id, saved_query_id, settings FROM open_tabs WHERE id = ?1",
             params![id],
             row_to_tab,
         )
@@ -109,6 +119,8 @@ mod tests {
             content: "g.V()".into(),
             cursor: 3,
             connection_id: Some("c".into()),
+            saved_query_id: Some("q".into()),
+            settings: Some("{}".into()),
         };
         s.save_tab_blocking(row.clone()).unwrap();
         assert_eq!(s.load_tab_blocking("t1").unwrap(), Some(row.clone()));

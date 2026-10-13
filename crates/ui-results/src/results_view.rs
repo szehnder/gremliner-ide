@@ -32,6 +32,19 @@ pub enum ViewKind {
     Explain,
 }
 
+impl ViewKind {
+    /// From a tab setting: `graph`, `table`, `json`, `console`.
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "graph" => Some(ViewKind::Graph),
+            "table" => Some(ViewKind::Table),
+            "json" => Some(ViewKind::Json),
+            "console" => Some(ViewKind::Console),
+            _ => None,
+        }
+    }
+}
+
 impl From<PreferredView> for ViewKind {
     fn from(v: PreferredView) -> Self {
         match v {
@@ -193,6 +206,10 @@ impl ResultsView {
         self.last_refresh = None;
         self.pending_refresh = None;
         self.view_pinned = false;
+        if let Some(view) = self.result.as_ref().and_then(|r| r.read(cx).preferred_view) {
+            self.view = view;
+            self.view_pinned = true;
+        }
         self.refresh(window, cx);
     }
 

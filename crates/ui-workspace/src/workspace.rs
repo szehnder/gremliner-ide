@@ -19,8 +19,8 @@ use crate::connections::ConnectionManager;
 use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
 use crate::panels::{
     AssistantPanel, ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, ExplorerPanel,
-    InspectorPanel, ResultsPanel, SchemaGraphPanel, SettingsPanel, WelcomePanel, WorkspacePanel,
-    confirm_reset_general,
+    HistoryPanel, InspectorPanel, ResultsPanel, SavedPanel, SchemaGraphPanel, SettingsPanel,
+    WelcomePanel, WorkspacePanel, confirm_reset_general,
 };
 use crate::perf_hud::PerfHud;
 use crate::persist::{self, LAYOUT_VERSION, LayoutProblem, WindowGeometry};
@@ -166,6 +166,8 @@ impl Workspace {
         let results = ResultsPanel::build(window, cx);
         let inspector = InspectorPanel::build(window, cx);
         let assistant = AssistantPanel::build(window, cx);
+        let saved = SavedPanel::build(window, cx);
+        let history = HistoryPanel::build(window, cx);
         dock.update(cx, |dock, cx| {
             dock.set_center(
                 DockLayout::tabs().panel_view(panel_handle(welcome), cx),
@@ -196,6 +198,16 @@ impl Workspace {
                     cx,
                 );
                 dock.set_dock_size(placement, size, window, cx);
+            }
+            // Saved queries and history share the left dock, behind the connections.
+            for panel in [panel_handle(saved), panel_handle(history)] {
+                dock.add_panel_view(panel, DockPlacement::Left, None, window, cx);
+            }
+            if let Some(id) = dock
+                .layout(DockPlacement::Left)
+                .and_then(|t| t.panels().next())
+            {
+                dock.select_panel(id, window, cx);
             }
             // The assistant shares the right dock, behind the inspector.
             dock.add_panel_view(
@@ -486,6 +498,104 @@ impl Workspace {
         Some(panel)
     }
 
+    /// Show a sidebar panel of type `P`, adding it to the left dock when a saved layout lacks it.
+    fn show_left<P: WorkspacePanel + 'static>(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<P> {
+        let found = [
+            DockPlacement::Left,
+            DockPlacement::Right,
+            DockPlacement::Bottom,
+            DockPlacement::Center,
+        ]
+        .into_iter()
+        .find_map(|placement| {
+            let dock = self.dock.read(cx);
+            dock.layout(placement)?
+                .panels()
+                .find_map(|id| Some((placement, id, dock.panel(id)?.view().downcast::<P>().ok()?)))
+        });
+        if let Some((placement, id, view)) = found {
+            if placement != DockPlacement::Center && !self.dock.read(cx).is_dock_open(placement) {
+                self.toggle(placement, window, cx);
+            }
+            self.dock
+                .update(cx, |dock, cx| dock.select_panel(id, window, cx));
+            return view;
+        }
+        let panel = P::build(window, cx);
+        self.dock.update(cx, |dock, cx| {
+            dock.add_panel_view(
+                panel_handle(panel.clone()),
+                DockPlacement::Left,
+                None,
+                window,
+                cx,
+            );
+        });
+        panel
+    }
+
+    pub fn show_history(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<HistoryPanel> {
+        let panel = self.show_left::<HistoryPanel>(window, cx);
+        panel.update(cx, |p, cx| p.reload(cx));
+        let search = panel.read(cx).search.clone();
+        search.update(cx, |s, cx| s.focus(window, cx));
+        panel
+    }
+
+    pub fn show_saved(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<SavedPanel> {
+        self.show_left::<SavedPanel>(window, cx)
+    }
+
+    /// Open saved query `row`: focus the tab already showing it, or open a new one.
+    pub fn open_saved(
+        &mut self,
+        row: &storage::SavedQueryRow,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<EditorPanel> {
+        let open = EditorTabs::global(cx)
+            .read(cx)
+            .tabs()
+            .into_iter()
+            .find(|t| t.read(cx).saved_query_id() == Some(row.id.as_str()));
+        if let Some(tab) = open {
+            let found = self
+                .dock
+                .read(cx)
+                .layout(DockPlacement::Center)
+                .and_then(|tree| {
+                    tree.panels().find(|id| {
+                        self.dock
+                            .read(cx)
+                            .panel(*id)
+                            .and_then(|p| p.view().downcast::<EditorPanel>().ok())
+                            .is_some_and(|v| v == tab)
+                    })
+                });
+            if let Some(id) = found {
+                self.dock
+                    .update(cx, |dock, cx| dock.select_panel(id, window, cx));
+            }
+            return tab;
+        }
+        let tab = self.new_tab(window, cx);
+        let row = row.clone();
+        tab.update(cx, |t, cx| t.load_saved(&row, window, cx));
+        tab
+    }
+
     /// Open a new tab with `text` bound to `connection`, without running it.
     pub fn open_query(
         &mut self,
@@ -725,6 +835,12 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
                 this.toggle_assistant(window, cx);
             }))
+            .on_action(cx.listener(|this, _: &ShowHistory, window, cx| {
+                this.show_history(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ShowSavedQueries, window, cx| {
+                this.show_saved(window, cx);
+            }))
             .on_action(cx.listener(|this, a: &OpenGraphExplorer, window, cx| {
                 this.open_explorer(a.connection, None, window, cx);
             }))
@@ -750,10 +866,7 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &SaveQuery, window, cx| {
                 if let Some(tab) = this.current_tab(window, cx) {
-                    tab.update(cx, |tab, cx| {
-                        tab.mark_saved(cx);
-                        tab.save_now(cx);
-                    });
+                    EditorPanel::save(&tab, window, cx);
                 }
             }))
             .on_action(cx.listener(|this, _: &ZoomIn, _, cx| this.zoom(Some(FONT_SIZE_STEP), cx)))
