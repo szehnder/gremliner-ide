@@ -47,6 +47,9 @@ struct Args {
     /// Open a tab with this query and run it on startup (on `--open-connection`'s connection).
     #[arg(long, value_name = "GREMLIN")]
     run: Option<String>,
+    /// Open a tab and ask the assistant this on startup (on `--open-connection`'s connection).
+    #[arg(long, value_name = "PROMPT", conflicts_with = "run")]
+    ask: Option<String>,
     /// Don't offer the first-run tour (scripted screenshots of other surfaces).
     #[arg(long)]
     no_tour: bool,
@@ -243,7 +246,7 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
                 let manager = ui_workspace::connections::ConnectionManager::global(cx);
                 connection = manager.read(cx).find_by_name(name).map(|c| c.id);
                 match connection {
-                    Some(id) if args.run.is_none() => {
+                    Some(id) if args.run.is_none() && args.ask.is_none() => {
                         manager.update(cx, |m, cx| m.connect(id, cx)).detach()
                     }
                     Some(_) => {}
@@ -251,6 +254,7 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
                 }
             }
             let run = args.run.clone();
+            let ask = args.ask.clone();
             let workspace = workspace.clone();
             let measure_startup = args.measure_startup;
             let _ = handle.update(cx, |_, window, _| {
@@ -265,6 +269,10 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
                     if let Some(query) = &run {
                         workspace
                             .update(cx, |ws, cx| ws.open_and_run(query, connection, window, cx));
+                    }
+                    if let Some(prompt) = &ask {
+                        workspace
+                            .update(cx, |ws, cx| ws.open_and_ask(prompt, connection, window, cx));
                     }
                     for name in &commands {
                         match cx.build_action(name, None) {

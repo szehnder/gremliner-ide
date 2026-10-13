@@ -1,6 +1,8 @@
 //! Project automation: `cargo xtask <command>`. See AGENTS.md.
 
 mod bench;
+mod demo;
+mod doctor;
 mod grammar;
 mod layering;
 mod screenshot;
@@ -29,6 +31,10 @@ enum Cmd {
         #[arg(long)]
         no_test: bool,
     },
+    /// Check this machine has what building and running Gremliner needs, and how to fix what is missing.
+    Doctor,
+    /// Start the sample gremlin-server (Docker, air-routes) and open the app connected to it.
+    Demo,
     /// Check crate layering rules (ADR-0004).
     Layering,
     /// Check UI code uses design tokens instead of raw colours/sizes (ADR-0023).
@@ -102,6 +108,8 @@ fn main() -> Result<()> {
     std::env::set_current_dir(&root)?;
     match Cli::parse().command {
         Cmd::Ci { no_test } => ci(&root, no_test),
+        Cmd::Doctor => doctor::run(),
+        Cmd::Demo => demo::run(&root),
         Cmd::Layering => layering::check(&root),
         Cmd::Tokens => tokens::check(&root),
         Cmd::SpecCoverage { enforce } => spec_coverage::run(&root, enforce),

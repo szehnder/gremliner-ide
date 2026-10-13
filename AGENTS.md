@@ -13,7 +13,7 @@ Rust; the UI is GPUI via `gpui-kit`.
   - I/O: `gremlin-client`, `providers`, `llm`, `assistant`, `storage`
   - UI: `ui-theme` (tokens, ADR-0035), `graph-canvas`, `ui-editor`, `ui-results`, `ui-assistant`, `ui-workspace`, `gremliner` (binary)
   - headless: `gremliner-cli`
-- `xtask/`: `cargo xtask <ci|testenv|bench|screenshot|spec-coverage|layering>`.
+- `xtask/`: `cargo xtask <ci|doctor|demo|testenv|bench|screenshot|spec-coverage|layering>`.
 - `testenv/`: Docker gremlin-server plus seed data (ADR-0026).
 
 ## Workflow
@@ -34,6 +34,8 @@ Rust; the UI is GPUI via `gpui-kit`.
 
 ## Useful commands
 ```
+cargo xtask doctor                   # prerequisites, with install commands for what's missing
+cargo xtask demo                     # testenv + air-routes + the app connected to it
 cargo xtask ci                       # everything CI runs
 cargo xtask testenv up|seed|down     # Docker gremlin-server with modern/crew/air-routes
 cargo run -p gremliner               # the app

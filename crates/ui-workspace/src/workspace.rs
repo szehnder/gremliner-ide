@@ -677,6 +677,24 @@ impl Workspace {
         tab
     }
 
+    /// Open a new tab on `connection` and ask the assistant `prompt` in its prompt bar.
+    pub fn open_and_ask(
+        &mut self,
+        prompt: &str,
+        connection: Option<uuid::Uuid>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) -> Entity<EditorPanel> {
+        let tab = self.new_tab(window, cx);
+        tab.update(cx, |tab, cx| {
+            if connection.is_some() {
+                tab.set_connection(connection, cx);
+            }
+            tab.ask(prompt, window, cx);
+        });
+        tab
+    }
+
     /// Open a new editor tab in the editor area and focus it.
     pub fn new_tab(
         &mut self,

@@ -84,6 +84,12 @@ pub fn run(root: &Path, cmd: TestenvCmd) -> Result<()> {
     }
 }
 
+/// What `cargo xtask demo` needs: the server up and air-routes loaded (skipped when already loaded).
+pub fn demo(root: &Path) -> Result<()> {
+    up(root)?;
+    seed(root, Dataset::AirRoutes, &SynthOpts::default(), false)
+}
+
 fn compose(root: &Path, args: &[&str]) -> Result<()> {
     let file = root.join("testenv/docker-compose.yml");
     let mut cmd = Command::new("docker");

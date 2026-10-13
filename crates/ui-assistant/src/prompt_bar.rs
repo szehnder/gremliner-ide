@@ -156,6 +156,13 @@ impl PromptBar {
         cx.notify();
     }
 
+    /// Type `prompt` into the bar and submit it (the app's `--ask`).
+    pub fn ask(&mut self, prompt: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.input
+            .update(cx, |i, cx| i.set_value(prompt.to_owned(), window, cx));
+        self.submit(window, cx);
+    }
+
     pub fn submit(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) {
         let prompt = self.input.read(cx).value().trim().to_owned();
         if prompt.is_empty() || self.disclosure.is_none() {

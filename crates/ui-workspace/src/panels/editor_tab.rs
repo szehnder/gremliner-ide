@@ -1252,6 +1252,14 @@ impl EditorPanel {
         cx.notify();
     }
 
+    /// Open the prompt bar and submit `prompt` to the assistant.
+    pub fn ask(&mut self, prompt: &str, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.open_prompt_bar(window, cx);
+        if let Some(bar) = self.prompt.clone() {
+            bar.update(cx, |b, cx| b.ask(prompt, window, cx));
+        }
+    }
+
     pub fn close_prompt_bar(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.prompt = None;
         self.prompt_task = None;

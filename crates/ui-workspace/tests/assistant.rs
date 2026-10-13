@@ -375,3 +375,33 @@ fn scenario_nl_to_gremlin_refine_a_query(cx: &mut TestAppContext) {
     );
     assert_eq!(texts.last().unwrap(), "only those with more than 3 runways");
 }
+
+/// The app's `--ask` (screenshots, agents): a scripted prompt reaches the pipeline like a typed one.
+#[gpui_kit::test]
+fn scripted_ask_opens_the_bar_and_submits(cx: &mut TestAppContext) {
+    if !testenv_up() {
+        return;
+    }
+    let mut env = setup(cx);
+    let llm = RUNTIME.block_on(MockServer::start(vec![Route::sse(
+        "/v1/chat/completions",
+        &answer(TEXAS),
+    )]));
+    profile(&mut env, &format!("{}/v1", llm.base));
+    let id = connection(&mut env);
+    let tab = tab(&mut env, id);
+    env.cx
+        .update(|window, cx| tab.update(cx, |t, cx| t.ask("airports in Texas", window, cx)));
+    env.cx.run_until_parked();
+    let bar = bar(&mut env, &tab);
+    wait_done(&mut env, &bar);
+    let (prompt, verified) = env.cx.update(|_, cx| {
+        let card = bar.read(cx).card.as_ref().expect("card");
+        (
+            card.prompt.clone(),
+            card.outcome.as_ref().is_some_and(|o| o.verified),
+        )
+    });
+    assert_eq!(prompt, "airports in Texas");
+    assert!(verified);
+}
