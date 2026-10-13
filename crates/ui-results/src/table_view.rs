@@ -9,6 +9,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use gremlin_model::GValue;
 use gremlin_model::normalize::{self, TableGroup, TableModel};
+use ui_theme::ButtonTip as _;
 use ui_theme::Tokens;
 
 /// Sort state: column and descending flag. Clicking a header cycles ascending → descending → off.
@@ -375,7 +376,7 @@ impl Render for TableView {
                     .label("CSV")
                     .ghost()
                     .xsmall()
-                    .tooltip("Export the visible rows as CSV")
+                    .tip("Export the visible rows as CSV")
                     .on_click(cx.listener(|this, _, _, cx| this.export(false, cx))),
             )
             .child(
@@ -383,7 +384,7 @@ impl Render for TableView {
                     .label("JSON")
                     .ghost()
                     .xsmall()
-                    .tooltip("Export the visible rows as JSON")
+                    .tip("Export the visible rows as JSON")
                     .on_click(cx.listener(|this, _, _, cx| this.export(true, cx))),
             );
         v_flex()

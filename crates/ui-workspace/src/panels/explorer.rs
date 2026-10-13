@@ -26,6 +26,7 @@ use super::{RunRequest, WorkspacePanel, panel_basics};
 use crate::connections::ConnectionManager;
 use crate::run::Runner;
 use crate::schema::SchemaRegistry;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 
 pub struct ExplorerPanel {
@@ -428,7 +429,7 @@ impl ExplorerPanel {
                             .icon(IconName::Close)
                             .ghost()
                             .xsmall()
-                            .tooltip("Start from any vertex")
+                            .tip("Start from any vertex")
                             .on_click(cx.listener(|this, _, _, cx| this.unfix_start(cx))),
                     ),
             );

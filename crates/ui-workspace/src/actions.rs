@@ -24,6 +24,7 @@ actions!(
         SaveQuery,
         ShowHistory,
         ShowSavedQueries,
+        FixQueryError,
         ResetGeneralSettings,
         Quit,
     ]

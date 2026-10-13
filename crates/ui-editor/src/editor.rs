@@ -734,10 +734,12 @@ impl Render for QueryEditor {
             .on_action(cx.listener(Self::format))
             .on_action(cx.listener(Self::toggle_comment))
             .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .child(Editor::new(&self.state).size_full().bordered(false)),
+                div().flex_1().min_h_0().child(
+                    Editor::new(&self.state)
+                        .aria_label("Gremlin query")
+                        .size_full()
+                        .bordered(false),
+                ),
             )
             .children(
                 self.signature

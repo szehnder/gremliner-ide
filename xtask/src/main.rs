@@ -78,6 +78,9 @@ enum Cmd {
         /// Use the normal data directory instead of a fresh one.
         #[arg(long)]
         keep_data: bool,
+        /// Capture every surface in both themes into target/screenshots/gallery/index.html.
+        #[arg(long)]
+        all_surfaces: bool,
         /// Arguments for the app, after `--`.
         #[arg(last = true)]
         args: Vec<String>,
@@ -120,6 +123,7 @@ fn main() -> Result<()> {
             delay,
             out,
             keep_data,
+            all_surfaces,
             args,
         } => screenshot::run(
             &root,
@@ -127,6 +131,7 @@ fn main() -> Result<()> {
                 delay,
                 out,
                 keep_data,
+                all_surfaces,
                 app_args: args,
             },
         ),

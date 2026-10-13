@@ -307,6 +307,7 @@ fn scenario_autocomplete_completion_speed() {
     times.sort_by(f64::total_cmp);
     let p95 = times[94];
     eprintln!("completion p95 {p95:.3} ms, max {:.3} ms", times[99]);
+    println!("measure completion_latency={p95:.3} ms");
     assert!(p95 <= 30.0, "p95 {p95:.3} ms");
 }
 

@@ -372,10 +372,14 @@ fn scenario_query_editor_large_file_typing(cx: &mut TestAppContext) {
     let mut times = Vec::new();
     for _ in 0..40 {
         let started = Instant::now();
+        // One keystroke, its effects, one frame. (`window.input` also draws a frame before and after
+        // each character, which would count three frames per key.)
         cx.update(|window, cx| {
-            window.input("x", cx);
-            window.render_frame(cx);
+            let mut key = gpui_kit::Keystroke::parse("x").unwrap();
+            key.key_char = Some("x".into());
+            window.dispatch_keystroke(key, cx);
         });
+        cx.update(|window, cx| window.render_frame(cx));
         times.push(started.elapsed());
     }
     times.sort();
@@ -384,6 +388,10 @@ fn scenario_query_editor_large_file_typing(cx: &mut TestAppContext) {
     // without a GPU, so this checks the budget with 2x headroom in debug builds.
     let budget_ms = if cfg!(debug_assertions) { 32 } else { 16 };
     eprintln!("10k-line keystroke p95: {p95:?}");
+    println!(
+        "measure editor_typing_10k_lines={:.3} ms",
+        p95.as_secs_f64() * 1000.0
+    );
     assert!(p95.as_millis() < budget_ms, "p95 {p95:?}");
 }
 

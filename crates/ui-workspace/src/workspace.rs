@@ -9,14 +9,14 @@ use gpui_kit::component::dock::{
 };
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::{
-    ActiveTheme as _, IconName, Selectable as _, Sizable as _, WindowExt as _, h_flex, v_flex,
+    ActiveTheme as _, IconName, Selectable as _, Sizable as _, h_flex, v_flex,
 };
 use gpui_kit::*;
 use storage::Storage;
 
 use crate::actions::*;
 use crate::connections::ConnectionManager;
-use crate::palette::{self, CommandContext, CommandRegistry, RECENT_KEY, RecentCommands};
+use crate::palette::{self, CommandContext, RECENT_KEY, RecentCommands};
 use crate::panels::{
     AssistantPanel, ConnectionsPanel, EditorPanel, EditorTabs, EditorTabsEvent, ExplorerPanel,
     HistoryPanel, InspectorPanel, ReportPanel, ResultsPanel, SavedPanel, SchemaGraphPanel,
@@ -27,7 +27,9 @@ use crate::persist::{self, LAYOUT_VERSION, LayoutProblem, WindowGeometry};
 use crate::run::{Runner, RunnerEvent};
 use crate::settings::AppSettings;
 use crate::status_bar::StatusBar;
+use crate::theme::ButtonTip as _;
 use crate::theme::{DEFAULT_UI_FONT_SIZE, FONT_SIZE_STEP, Tokens};
+use crate::tour::{Tour, TourEvent};
 
 /// How long layout changes settle before they are written.
 const SAVE_DEBOUNCE: Duration = Duration::from_millis(400);
@@ -36,6 +38,9 @@ const SAVE_DEBOUNCE: Duration = Duration::from_millis(400);
 pub struct WorkspaceOptions {
     /// Show the frame-time overlay.
     pub perf_hud: bool,
+    /// Offer the first-run tour unless it was finished or skipped before (the app sets this; tests
+    /// opt in).
+    pub tour: bool,
 }
 
 pub struct Workspace {
@@ -45,6 +50,7 @@ pub struct Workspace {
     perf_hud: Option<PerfHud>,
     storage: Option<Storage>,
     save_task: Option<Task<()>>,
+    tour: Option<Entity<Tour>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -141,6 +147,15 @@ impl Workspace {
         AppSettings::set_appearance(window.appearance(), cx);
 
         let status_bar = cx.new(StatusBar::new);
+        let mut subscriptions = subscriptions;
+        let tour = (options.tour && crate::tour::should_show(storage.as_ref())).then(|| {
+            let tour = cx.new(|_| Tour::new(storage.clone()));
+            subscriptions.push(cx.subscribe(&tour, |this, _, _: &TourEvent, cx| {
+                this.tour = None;
+                cx.notify();
+            }));
+            tour
+        });
         Self {
             focus_handle: cx.focus_handle(),
             dock,
@@ -148,8 +163,14 @@ impl Workspace {
             perf_hud: options.perf_hud.then(PerfHud::default),
             storage,
             save_task: None,
+            tour,
             _subscriptions: subscriptions,
         }
+    }
+
+    /// The first-run tour, while it shows.
+    pub fn tour(&self) -> Option<&Entity<Tour>> {
+        self.tour.as_ref()
     }
 
     pub fn dock_area(&self) -> &Entity<DockArea> {
@@ -266,6 +287,28 @@ impl Workspace {
             dock.select_panel(id, window, cx);
         });
         Some(view)
+    }
+
+    /// Open the assistant on the tab that ran last and ask it to fix that run's error.
+    fn fix_query_error(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let tab_id = Runner::global(cx).read(cx).latest_tab();
+        let tab = tab_id.and_then(|id| {
+            EditorTabs::global(cx)
+                .read(cx)
+                .tabs()
+                .into_iter()
+                .find(|t| t.read(cx).id() == id)
+        });
+        let Some(tab) = tab.or_else(|| self.current_tab(window, cx)) else {
+            return;
+        };
+        let Some(panel) = self.toggle_assistant(window, cx) else {
+            return;
+        };
+        let chat = panel.update(cx, |p, cx| p.view_for(&tab, window, cx));
+        chat.update(cx, |c, cx| {
+            c.send(assistant::chat::Mode::Fix, String::new(), cx)
+        });
     }
 
     /// Keep the sidebar within its designed range; the dock itself only enforces a global minimum.
@@ -403,35 +446,7 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        window.open_dialog(cx, |dialog, window, cx| {
-            let theme = cx.theme();
-            let rows = CommandRegistry::commands(cx).iter().filter_map(|meta| {
-                let binding = Kbd::binding_for_action(meta.action.as_ref(), None, window)?;
-                Some(
-                    h_flex()
-                        .justify_between()
-                        .py(Tokens::space(1.5))
-                        .border_b(Tokens::BORDER)
-                        .border_color(theme.border)
-                        .child(
-                            h_flex()
-                                .gap(Tokens::space(2.0))
-                                .child(
-                                    div()
-                                        .text_color(theme.muted_foreground)
-                                        .child(format!("{}:", meta.category)),
-                                )
-                                .child(meta.title),
-                        )
-                        .child(binding),
-                )
-            });
-            dialog
-                .title("Keyboard shortcuts")
-                .w(Tokens::SHORTCUTS_WIDTH)
-                .margin_top(Tokens::DIALOG_TOP)
-                .child(v_flex().id("shortcuts").children(rows))
-        });
+        crate::shortcuts::open(window, cx);
     }
 
     /// Show the schema graph of `connection` (default: the active connection), reusing its open tab.
@@ -742,7 +757,7 @@ impl Workspace {
                 .ghost()
                 .small()
                 .selected(open)
-                .tooltip(tip)
+                .tip(tip)
                 .on_click(move |_, window, cx| window.dispatch_action(action.boxed_clone(), cx))
         };
         let palette_hint = Kbd::binding_for_action(&OpenCommandPalette, None, window);
@@ -805,7 +820,7 @@ impl Workspace {
                     .icon(IconName::Settings)
                     .ghost()
                     .small()
-                    .tooltip("Settings")
+                    .tip("Settings")
                     .on_click(|_, window, cx| window.dispatch_action(Box::new(OpenSettings), cx)),
             )
     }
@@ -856,6 +871,9 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, _: &SplitRight, window, cx| this.split_right(window, cx)))
             .on_action(cx.listener(|this, _: &ToggleAssistant, window, cx| {
                 this.toggle_assistant(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &FixQueryError, window, cx| {
+                this.fix_query_error(window, cx);
             }))
             .on_action(cx.listener(|this, _: &ShowHistory, window, cx| {
                 this.show_history(window, cx);
@@ -912,5 +930,12 @@ impl Render for Workspace {
             .child(div().flex_1().min_h_0().child(self.dock.clone()))
             .child(self.status_bar.clone())
             .children(hud)
+            .children(self.tour.clone().map(|tour| {
+                div()
+                    .absolute()
+                    .right(Tokens::space(4.0))
+                    .bottom(Tokens::space(10.0))
+                    .child(tour)
+            }))
     }
 }

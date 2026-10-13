@@ -219,6 +219,10 @@ fn scenario_results_table_scroll_100k_rows(cx: &mut TestAppContext) {
         worst = worst.max(started.elapsed());
     }
     eprintln!("100k-row table: worst frame {worst:?}");
+    println!(
+        "measure table_scroll_100k_frame={:.3} ms",
+        worst.as_secs_f64() * 1000.0
+    );
     let budget = if cfg!(debug_assertions) { 32 } else { 16 };
     assert!(worst.as_millis() < budget, "worst frame {worst:?}");
 }

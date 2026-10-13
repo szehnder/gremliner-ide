@@ -59,7 +59,7 @@ struct CameraAnim {
     follow: Option<NodeIx>,
 }
 
-/// Duration of camera tweens (ADR-0023 motion token).
+/// Duration of camera tweens (ADR-0023's slow motion token, `ui_theme::Motion::Slow`).
 const CAMERA_TWEEN_MS: f32 = 320.0;
 
 enum Drag {
@@ -379,6 +379,25 @@ impl GraphCanvas {
             duration_ms: CAMERA_TWEEN_MS,
             follow: Some(n),
         });
+    }
+
+    /// Jump any camera tween to its end and stop inertia (reduce motion).
+    pub fn finish_camera_motion(&mut self) {
+        if let Some(anim) = self.camera_anim.take() {
+            let mut to = anim.to;
+            if let Some(n) = anim.follow
+                && (n.0 as usize) < self.store.node_count()
+            {
+                to.center = self.store.position(n);
+            }
+            self.camera = to;
+        }
+        self.velocity = [0.0, 0.0];
+    }
+
+    /// True while a camera tween runs.
+    pub fn camera_animating(&self) -> bool {
+        self.camera_anim.is_some()
     }
 
     /// Advances the camera tween; returns true while it runs.
@@ -876,8 +895,12 @@ fn paint_frame(
 ) {
     let started = Instant::now();
     // Advance animations (benchmark camera path, inertia) before drawing.
-    let (animating, finished_bench) = entity.update(cx, |this, _| {
+    let (animating, finished_bench) = entity.update(cx, |this, cx| {
         let dt = this.stats.intervals_ms.last().copied().unwrap_or(16.0) / 1000.0;
+        if cx.reduce_motion() {
+            // Camera moves land at once and panning does not coast.
+            this.finish_camera_motion();
+        }
         // Layout first, so a camera tween that follows a node aims at its new position.
         let mut animating =
             this.apply_layout_frame() | this.step_inertia(dt.min(0.05)) | this.step_camera_anim();

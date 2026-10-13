@@ -13,6 +13,7 @@ use gremlin_model::{GValue, console};
 use ui_theme::Tokens;
 
 use crate::graph_view::{GraphView, SelectedElement, parse_typed, value_type_names};
+use ui_theme::ButtonTip as _;
 
 /// One property value as the inspector lists it.
 #[derive(Clone, Debug, PartialEq)]
@@ -323,7 +324,7 @@ impl Inspector {
                                     .icon(Icon::new(IconName::Settings))
                                     .ghost()
                                     .xsmall()
-                                    .tooltip("Edit value")
+                                    .tip("Edit value")
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.start_edit(&edit_row, window, cx)
                                     })),
@@ -336,7 +337,7 @@ impl Inspector {
                                     .icon(Icon::new(IconName::Delete))
                                     .ghost()
                                     .xsmall()
-                                    .tooltip("Remove property")
+                                    .tip("Remove property")
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.remove_property(key.clone(), cx)
                                     })),

@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use super::{LlmProfiles, form};
 use crate::connections::ConnectionManager;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 
 /// Lowercase id-safe text for element ids.
@@ -174,7 +175,7 @@ impl AiSettingsView {
                         .icon(IconName::Settings2)
                         .ghost()
                         .xsmall()
-                        .tooltip("Edit")
+                        .tip("Edit")
                         .on_click(move |_, window, cx| {
                             edit(id, window, cx);
                         }),
@@ -184,7 +185,7 @@ impl AiSettingsView {
                         .icon(IconName::Delete)
                         .ghost()
                         .xsmall()
-                        .tooltip("Delete")
+                        .tip("Delete")
                         .on_click(move |_, window, cx| {
                             confirm_delete(id, name.clone(), window, cx)
                         }),

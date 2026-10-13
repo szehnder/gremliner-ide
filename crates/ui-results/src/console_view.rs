@@ -11,6 +11,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use gremlin_model::{GValue, console};
 use regex::{Regex, RegexBuilder};
+use ui_theme::ButtonTip as _;
 use ui_theme::Tokens;
 
 /// Every match of `query` in `lines`: (line, byte range). Invalid regexes match nothing (and report it).
@@ -197,7 +198,7 @@ impl Render for ConsoleView {
                     .label(if self.raw { "Raw GraphSON" } else { "Console" })
                     .ghost()
                     .xsmall()
-                    .tooltip("Toggle between console text and the raw server response")
+                    .tip("Toggle between console text and the raw server response")
                     .on_click(cx.listener(|this, _, _, cx| {
                         let raw = !this.raw;
                         this.set_raw(raw, cx);
@@ -217,7 +218,7 @@ impl Render for ConsoleView {
                     .xsmall()
                     .when(self.regex, |b| b.primary())
                     .when(!self.regex, |b| b.ghost())
-                    .tooltip("Regular expression")
+                    .tip("Regular expression")
                     .on_click(cx.listener(|this, _, _, cx| {
                         let regex = !this.regex;
                         this.set_regex(regex, cx);

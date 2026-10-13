@@ -5,14 +5,15 @@ use gpui_kit::component::dock::{BasePanel, DockPlacement, Panel, PanelControl};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, WindowExt as _, h_flex, v_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, ThemeStyled as _, WindowExt as _, h_flex,
+    v_flex,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use providers::ConnectionConfig;
 use uuid::Uuid;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use schema::{LabelInfo, Schema};
 
@@ -22,6 +23,7 @@ use crate::actions::{OpenSampleQuery, OpenSchemaGraph};
 use crate::connections::style::{color_tag_color, environment_badge, status_dot};
 use crate::connections::{ConnStatus, ConnectionManager, form};
 use crate::schema::SchemaRegistry;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 
 pub struct ConnectionsPanel {
@@ -31,6 +33,8 @@ pub struct ConnectionsPanel {
     expanded: HashSet<String>,
     /// Connections whose schema tree the user collapsed (open by default).
     schema_collapsed: HashSet<Uuid>,
+    /// Each row is a tab stop; Enter connects.
+    row_focus: HashMap<Uuid, FocusHandle>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -60,6 +64,7 @@ impl WorkspacePanel for ConnectionsPanel {
                 search,
                 expanded: HashSet::new(),
                 schema_collapsed: HashSet::new(),
+                row_focus: HashMap::new(),
                 _subscriptions: subscriptions,
             }
         })
@@ -91,7 +96,7 @@ impl Panel for ConnectionsPanel {
                 .icon(IconName::Plus)
                 .ghost()
                 .xsmall()
-                .tooltip("Add connection")
+                .tip("Add connection")
                 .on_click(|_, window, cx| window.dispatch_action(Box::new(AddConnection), cx)),
         ])
     }
@@ -150,8 +155,13 @@ impl ConnectionsPanel {
         config: &ConnectionConfig,
         status: ConnStatus,
         active: bool,
+        focus: &FocusHandle,
+        window: &Window,
         cx: &mut Context<'_, Self>,
     ) -> impl IntoElement {
+        let focused = focus.is_focused(window);
+        // The hover actions are tab stops too, so they show while focus is anywhere in the row.
+        let focus_within = focus.contains_focused(window, cx);
         let theme = cx.theme().clone();
         let id = config.id;
         let slug = slug(&config.name);
@@ -161,17 +171,30 @@ impl ConnectionsPanel {
                 .icon(icon)
                 .ghost()
                 .xsmall()
-                .tooltip(tip)
+                .tip(tip)
         };
         let group = SharedString::from(format!("conn-row-group-{slug}"));
         let edit_config = config.clone();
-        let error_hint = match &status {
-            ConnStatus::Error(err) => Some(err.reason.clone()),
-            _ => None,
-        };
         h_flex()
             .id(SharedString::from(format!("conn-row-{slug}")))
             .test_support()
+            .track_focus(focus)
+            .role(gpui_kit::Role::Button)
+            .aria_label(SharedString::from(format!(
+                "{}, {}, {}",
+                config.name,
+                config.endpoint_label(),
+                status.label()
+            )))
+            .on_key_down(cx.listener(move |_, event: &KeyDownEvent, _, cx| {
+                if event.keystroke.key == "enter" && !event.keystroke.modifiers.modified() {
+                    cx.stop_propagation();
+                    ConnectionManager::global(cx)
+                        .update(cx, |m, cx| m.connect(id, cx))
+                        .detach();
+                }
+            }))
+            .when(focused, |row| row.focus_ring_style(window, cx))
             .group(group.clone())
             .relative()
             .gap(Tokens::space(2.0))
@@ -225,12 +248,8 @@ impl ConnectionsPanel {
                         div()
                             .truncate()
                             .text_size(Tokens::text_xs())
-                            .text_color(if error_hint.is_some() {
-                                theme.danger
-                            } else {
-                                theme.muted_foreground
-                            })
-                            .child(error_hint.unwrap_or_else(|| config.endpoint_label())),
+                            .text_color(theme.muted_foreground)
+                            .child(config.endpoint_label()),
                     ),
             )
             .child(
@@ -242,7 +261,7 @@ impl ConnectionsPanel {
                     .right(Tokens::space(1.0))
                     .pl(Tokens::space(2.0))
                     .bg(theme.sidebar_accent)
-                    .invisible()
+                    .when(!focus_within, |s| s.invisible())
                     .group_hover(group, |s| s.visible())
                     .child(if connected {
                         action("disconnect", IconName::CircleX, "Disconnect").on_click(cx.listener(
@@ -294,7 +313,7 @@ impl ConnectionsPanel {
 }
 
 impl Render for ConnectionsPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let manager = ConnectionManager::global(cx);
         let (connections, active) = {
             let m = manager.read(cx);
@@ -340,6 +359,13 @@ impl Render for ConnectionsPanel {
             .filter(|(c, _)| query.is_empty() || c.name.to_lowercase().contains(&query))
             .collect();
         let none_match = visible.is_empty();
+        self.row_focus
+            .retain(|id, _| visible.iter().any(|(c, _)| c.id == *id));
+        for (config, _) in &visible {
+            self.row_focus
+                .entry(config.id)
+                .or_insert_with(|| cx.focus_handle().tab_stop(true));
+        }
         base.child(
             div()
                 .px(Tokens::space(2.0))
@@ -361,8 +387,20 @@ impl Render for ConnectionsPanel {
                 .children(visible.into_iter().map(|(config, status)| {
                     let is_active = active == Some(config.id);
                     let connected = matches!(status, ConnStatus::Connected(_));
+                    let failure = match &status {
+                        ConnStatus::Error(err) => Some(err.clone()),
+                        _ => None,
+                    };
                     v_flex()
-                        .child(self.row(&config, status, is_active, cx))
+                        .child(self.row(
+                            &config,
+                            status,
+                            is_active,
+                            &self.row_focus[&config.id],
+                            window,
+                            cx,
+                        ))
+                        .children(failure.map(|err| self.error_card(&config, &err, cx)))
                         .when(connected, |col| col.children(self.schema_tree(&config, cx)))
                         .into_any_element()
                 }))
@@ -402,6 +440,74 @@ fn age_text(discovered_at_ms: i64) -> String {
 }
 
 impl ConnectionsPanel {
+    /// Why the last attempt failed, what to try, and the two ways forward.
+    fn error_card(
+        &self,
+        config: &ConnectionConfig,
+        err: &providers::ProviderError,
+        cx: &mut Context<'_, Self>,
+    ) -> AnyElement {
+        let theme = cx.theme();
+        let slug = slug(&config.name);
+        let id = config.id;
+        let edit_config = config.clone();
+        v_flex()
+            .id(SharedString::from(format!("conn-error-{slug}")))
+            .test_support()
+            .mx(Tokens::space(2.0))
+            .mt(Tokens::space(0.5))
+            .mb(Tokens::space(1.0))
+            .p(Tokens::space(2.0))
+            .gap(Tokens::space(1.0))
+            .rounded(Tokens::RADIUS_MD)
+            .border_1()
+            .border_color(theme.danger.opacity(0.4))
+            .bg(theme.danger.opacity(0.08))
+            .text_size(Tokens::text_sm())
+            .child(
+                div()
+                    .id(SharedString::from(format!("conn-error-reason-{slug}")))
+                    .test_support()
+                    .text_color(theme.danger)
+                    .child(err.reason.clone()),
+            )
+            .when(!err.suggestion.is_empty(), |card| {
+                card.child(
+                    div()
+                        .text_color(theme.muted_foreground)
+                        .child(err.suggestion.clone()),
+                )
+            })
+            .child(
+                h_flex()
+                    .gap(Tokens::space(1.0))
+                    .pt(Tokens::space(0.5))
+                    .child(
+                        Button::new(SharedString::from(format!("conn-retry-{slug}")))
+                            .label("Retry")
+                            .icon(IconName::RefreshCw)
+                            .xsmall()
+                            .outline()
+                            .on_click(cx.listener(move |_, _, _, cx| {
+                                ConnectionManager::global(cx)
+                                    .update(cx, |m, cx| m.connect(id, cx))
+                                    .detach();
+                            })),
+                    )
+                    .child(
+                        Button::new(SharedString::from(format!("conn-error-edit-{slug}")))
+                            .label("Edit connection")
+                            .icon(IconName::Settings2)
+                            .xsmall()
+                            .ghost()
+                            .on_click(cx.listener(move |_, _, window, cx| {
+                                form::open(Some(edit_config.clone()), window, cx);
+                            })),
+                    ),
+            )
+            .into_any_element()
+    }
+
     fn toggle(&mut self, key: String, cx: &mut Context<'_, Self>) {
         if !self.expanded.remove(&key) {
             self.expanded.insert(key);
@@ -439,7 +545,7 @@ impl ConnectionsPanel {
                 .icon(icon)
                 .ghost()
                 .xsmall()
-                .tooltip(tip)
+                .tip(tip)
         };
         let header = h_flex()
             .id(SharedString::from(format!("schema-header-{slug}")))
@@ -652,7 +758,7 @@ impl ConnectionsPanel {
                         .label(format!("Sample {SAMPLE_SIZE}"))
                         .ghost()
                         .xsmall()
-                        .tooltip("Open a sample query in a new tab")
+                        .tip("Open a sample query in a new tab")
                         .on_click(move |_, window, cx| {
                             cx.stop_propagation();
                             window.dispatch_action(

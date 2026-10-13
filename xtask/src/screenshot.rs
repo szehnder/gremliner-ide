@@ -3,6 +3,10 @@
 //! Builds the release app, launches it with a fresh data directory (so it shows first-launch state unless
 //! `--keep-data`), waits for it to settle, captures the app window to a PNG and lets the app exit.
 //!
+//! `cargo xtask screenshot --all-surfaces` captures every surface in [`SURFACES`] in light and dark
+//! themes and writes `target/screenshots/gallery/index.html` for review (ADR-0023's polish gate).
+//! Surfaces that need a server use the testenv; they are skipped with a note when it is down.
+//!
 //! Capture backends, tried in order:
 //! - KDE Plasma (Wayland or X11): `spectacle -b -n -a -o FILE` (the active window; the new window takes
 //!   focus on launch).
@@ -19,47 +23,307 @@ pub struct Options {
     pub delay: f32,
     pub out: Option<PathBuf>,
     pub keep_data: bool,
+    pub all_surfaces: bool,
     pub app_args: Vec<String>,
 }
+
+/// One surface of the gallery: a name, what it shows, and the app arguments that reach it.
+struct Surface {
+    name: &'static str,
+    caption: &'static str,
+    /// Needs the testenv and a saved `local` connection.
+    connected: bool,
+    args: &'static [&'static str],
+}
+
+const SURFACES: &[Surface] = &[
+    Surface {
+        name: "first-launch",
+        caption: "First launch: welcome view and the tour",
+        connected: false,
+        args: &[],
+    },
+    Surface {
+        name: "welcome",
+        caption: "Welcome view (empty editor area)",
+        connected: false,
+        args: &["--no-tour"],
+    },
+    Surface {
+        name: "palette",
+        caption: "Command palette",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::OpenCommandPalette"],
+    },
+    Surface {
+        name: "shortcuts",
+        caption: "Keyboard shortcuts sheet",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::ShowKeyboardShortcuts"],
+    },
+    Surface {
+        name: "settings",
+        caption: "Settings",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::OpenSettings"],
+    },
+    Surface {
+        name: "new-connection",
+        caption: "New connection form",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::AddConnection"],
+    },
+    Surface {
+        name: "query-tab",
+        caption: "Empty query tab and empty results dock",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::NewQueryTab"],
+    },
+    Surface {
+        name: "history",
+        caption: "Query history (empty)",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::ShowHistory"],
+    },
+    Surface {
+        name: "saved",
+        caption: "Saved queries (empty)",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::ShowSavedQueries"],
+    },
+    Surface {
+        name: "assistant",
+        caption: "Assistant panel",
+        connected: false,
+        args: &["--no-tour", "--command", "workspace::ToggleAssistant"],
+    },
+    Surface {
+        name: "graph",
+        caption: "Graph results (air-routes paths)",
+        connected: true,
+        args: &[
+            "--no-tour",
+            "--open-connection",
+            "local",
+            "--run",
+            "g.V().has('airport','code','AUS').outE('route').inV().path().limit(40)",
+        ],
+    },
+    Surface {
+        name: "table",
+        caption: "Table results (air-routes airports)",
+        connected: true,
+        args: &[
+            "--no-tour",
+            "--open-connection",
+            "local",
+            "--run",
+            "g.V().hasLabel('airport').limit(200).valueMap('code','city','runways')",
+        ],
+    },
+    Surface {
+        name: "query-error",
+        caption: "Query error state",
+        connected: true,
+        args: &[
+            "--no-tour",
+            "--open-connection",
+            "local",
+            "--run",
+            "g.V().nosuchstep()",
+        ],
+    },
+    Surface {
+        name: "schema-graph",
+        caption: "Schema graph",
+        connected: true,
+        args: &[
+            "--no-tour",
+            "--open-connection",
+            "local",
+            "--command",
+            "workspace::OpenSchemaGraph",
+        ],
+    },
+    Surface {
+        name: "explorer",
+        caption: "Graph explorer",
+        connected: true,
+        args: &[
+            "--no-tour",
+            "--open-connection",
+            "local",
+            "--command",
+            "workspace::OpenGraphExplorer",
+        ],
+    },
+    Surface {
+        name: "connection-error",
+        caption: "Connection error with Retry and Edit",
+        connected: false,
+        args: &["--no-tour", "--open-connection", "broken"],
+    },
+];
 
 pub fn run(root: &Path, opts: Options) -> Result<()> {
     crate::run(
         "build release app",
-        Command::new("cargo").args(["build", "--release", "-p", "gremliner"]),
+        Command::new("cargo").args([
+            "build",
+            "--release",
+            "-p",
+            "gremliner",
+            "-p",
+            "gremliner-cli",
+        ]),
     )?;
     let bin = root.join("target/release/gremliner");
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or_default();
     let shots = root.join("target/screenshots");
     std::fs::create_dir_all(&shots)?;
+    if opts.all_surfaces {
+        return gallery(root, &bin, &shots, opts.delay);
+    }
+    let stamp = stamp();
     let out = opts
         .out
         .unwrap_or_else(|| shots.join(format!("gremliner-{stamp}.png")));
-
-    let mut app = Command::new(&bin);
-    // Keep the app alive comfortably past the capture.
-    let exit_after = opts.delay + 4.0;
-    app.args(["--exit-after", &format!("{exit_after}")]);
     let data_dir = shots.join(format!("data-{stamp}"));
-    if !opts.keep_data && !opts.app_args.iter().any(|a| a == "--data-dir") {
-        app.arg("--data-dir").arg(&data_dir);
-    }
-    app.args(&opts.app_args).stdout(Stdio::null());
-    eprintln!("\n==> launch {} {:?}", bin.display(), opts.app_args);
-    let mut child = app.spawn().context("failed to launch the app")?;
-
-    std::thread::sleep(Duration::from_secs_f32(opts.delay));
-    let captured = capture(&out);
-    let status = child.wait()?;
+    let data = (!opts.keep_data && !opts.app_args.iter().any(|a| a == "--data-dir"))
+        .then_some(data_dir.as_path());
+    let result = shoot(&bin, &opts.app_args, data, opts.delay, &out);
     let _ = std::fs::remove_dir_all(&data_dir);
+    result?;
+    println!("{}", out.display());
+    Ok(())
+}
+
+fn stamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default()
+}
+
+/// Launch the app with `args` (on `data_dir` when given), capture after `delay`, let it exit.
+fn shoot(
+    bin: &Path,
+    args: &[String],
+    data_dir: Option<&Path>,
+    delay: f32,
+    out: &Path,
+) -> Result<()> {
+    let mut app = Command::new(bin);
+    // Keep the app alive comfortably past the capture.
+    let exit_after = delay + 4.0;
+    app.args(["--exit-after", &format!("{exit_after}")]);
+    if let Some(dir) = data_dir {
+        app.arg("--data-dir").arg(dir);
+    }
+    app.args(args).stdout(Stdio::null());
+    eprintln!("\n==> launch {} {:?}", bin.display(), args);
+    let mut child = app.spawn().context("failed to launch the app")?;
+    std::thread::sleep(Duration::from_secs_f32(delay));
+    let captured = capture(out);
+    let status = child.wait()?;
     captured?;
     if !status.success() {
         bail!("the app exited with {status}");
     }
-    println!("{}", out.display());
     Ok(())
+}
+
+/// A fresh data directory with the `local` (testenv air-routes) and `broken` (nothing listening)
+/// connections saved through the CLI.
+fn seed_data_dir(root: &Path, dir: &Path) -> Result<()> {
+    let _ = std::fs::remove_dir_all(dir);
+    std::fs::create_dir_all(dir)?;
+    let cli = root.join("target/release/gremliner-cli");
+    for (name, url) in [
+        ("local", "ws://localhost:8182/gremlin"),
+        ("broken", "ws://localhost:1/gremlin"),
+    ] {
+        crate::run(
+            &format!("save connection {name}"),
+            Command::new(&cli).arg("--data-dir").arg(dir).args([
+                "connections",
+                "add",
+                "--name",
+                name,
+                "--url",
+                url,
+            ]),
+        )?;
+    }
+    Ok(())
+}
+
+fn gallery(root: &Path, bin: &Path, shots: &Path, delay: f32) -> Result<()> {
+    let dir = shots.join("gallery");
+    std::fs::create_dir_all(&dir)?;
+    let testenv = std::net::TcpStream::connect_timeout(
+        &std::net::SocketAddr::from(([127, 0, 0, 1], 8182)),
+        Duration::from_millis(500),
+    )
+    .is_ok();
+    let mut rows = Vec::new();
+    for surface in SURFACES {
+        if surface.connected && !testenv {
+            eprintln!("SKIPPED {}: testenv not reachable", surface.name);
+            rows.push((surface, None));
+            continue;
+        }
+        let mut shots_for = Vec::new();
+        for theme in ["light", "dark"] {
+            let data = dir.join(format!("data-{}-{theme}", surface.name));
+            seed_data_dir(root, &data)?;
+            let mut args: Vec<String> = vec!["--theme".into(), theme.into()];
+            args.extend(surface.args.iter().map(|a| (*a).to_owned()));
+            let file = format!("{}-{theme}.png", surface.name);
+            let result = shoot(bin, &args, Some(&data), delay, &dir.join(&file));
+            let _ = std::fs::remove_dir_all(&data);
+            match result {
+                Ok(()) => shots_for.push(file),
+                Err(err) => eprintln!("FAILED {} ({theme}): {err:#}", surface.name),
+            }
+        }
+        rows.push((surface, Some(shots_for)));
+    }
+    let index = dir.join("index.html");
+    std::fs::write(&index, gallery_html(&rows))?;
+    println!("{}", index.display());
+    Ok(())
+}
+
+fn gallery_html(rows: &[(&Surface, Option<Vec<String>>)]) -> String {
+    let mut body = String::new();
+    for (surface, shots) in rows {
+        body.push_str(&format!(
+            "<section><h2>{}</h2><p>{} <code>{}</code></p>",
+            surface.name,
+            surface.caption,
+            surface.args.join(" ").replace('<', "&lt;")
+        ));
+        match shots {
+            None => body.push_str("<p class=skip>Skipped: the testenv was not running.</p>"),
+            Some(files) => {
+                body.push_str("<div class=row>");
+                for f in files {
+                    body.push_str(&format!(
+                        "<a href=\"{f}\"><img src=\"{f}\" alt=\"{f}\"></a>"
+                    ));
+                }
+                body.push_str("</div>");
+            }
+        }
+        body.push_str("</section>\n");
+    }
+    format!(
+        "<!doctype html><meta charset=utf-8><title>Gremliner surfaces</title>\n<style>\
+         body{{font:14px system-ui;margin:24px;background:#f4f4f5;color:#18181b}}\
+         .row{{display:flex;gap:12px;flex-wrap:wrap}}img{{width:640px;border:1px solid #d4d4d8}}\
+         section{{margin-bottom:32px}}.skip{{color:#a16207}}code{{font-size:12px}}</style>\n\
+         <h1>Gremliner surfaces</h1><p>Review each in light and dark against docs/ux/audit.md.</p>\n{body}"
+    )
 }
 
 fn has(tool: &str) -> bool {

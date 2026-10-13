@@ -32,6 +32,7 @@ use crate::style_library::StyleLibrary;
 
 mod edit;
 pub use edit::{MutationRequest, Proposal, SelectedElement, parse_typed, value_type_names};
+use ui_theme::ButtonTip as _;
 use ui_theme::Tokens;
 
 actions!(
@@ -473,6 +474,48 @@ impl GraphView {
             visible_edges: g.visible_edge_count(),
             selected: g.selected_count(),
         }
+    }
+
+    /// A sentence describing the selection for screen readers, e.g.
+    /// "2 vertices selected: airport LHR, airport JFK. 1 edge selected."
+    pub fn selection_summary(&self, cx: &App) -> String {
+        const NAMED: usize = 5;
+        let g = self.store(cx);
+        let nodes: Vec<NodeIx> = g.selected().collect();
+        let edges = g.selected_edges().count();
+        if nodes.is_empty() && edges == 0 {
+            return format!(
+                "No selection. {} vertices and {} edges shown.",
+                g.visible_node_count(),
+                g.visible_edge_count()
+            );
+        }
+        let plural =
+            |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+        let mut s = String::new();
+        if !nodes.is_empty() {
+            let names: Vec<String> = nodes
+                .iter()
+                .take(NAMED)
+                .map(|&n| format!("{} {}", g.vertex_label_name(g.node_label(n)), g.caption(n)))
+                .collect();
+            s.push_str(&format!(
+                "{} selected: {}",
+                plural(nodes.len(), "vertex", "vertices"),
+                names.join(", ")
+            ));
+            if nodes.len() > NAMED {
+                s.push_str(&format!(" and {} more", nodes.len() - NAMED));
+            }
+            s.push('.');
+        }
+        if edges > 0 {
+            if !s.is_empty() {
+                s.push(' ');
+            }
+            s.push_str(&format!("{} selected.", plural(edges, "edge", "edges")));
+        }
+        s
     }
 
     /// The "N of M neighbours shown" text, when an expand was capped.
@@ -1175,7 +1218,7 @@ impl GraphView {
                     .icon(Icon::new(IconName::Maximize))
                     .ghost()
                     .xsmall()
-                    .tooltip("Fit to view (F)")
+                    .tip("Fit to view (F)")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.canvas.update(cx, |c, cx| {
                             c.request_fit();
@@ -1188,7 +1231,7 @@ impl GraphView {
                     .icon(Icon::new(IconName::Minus))
                     .ghost()
                     .xsmall()
-                    .tooltip("Zoom out")
+                    .tip("Zoom out")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.canvas.update(cx, |c, cx| {
                             c.zoom_by(1.0 / 1.25);
@@ -1201,7 +1244,7 @@ impl GraphView {
                     .icon(Icon::new(IconName::Plus))
                     .ghost()
                     .xsmall()
-                    .tooltip("Zoom in")
+                    .tip("Zoom in")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.canvas.update(cx, |c, cx| {
                             c.zoom_by(1.25);
@@ -1223,14 +1266,14 @@ impl GraphView {
                     .icon(Icon::new(IconName::CircleX))
                     .ghost()
                     .xsmall()
-                    .tooltip("Stop layout")
+                    .tip("Stop layout")
                     .on_click(cx.listener(|this, _, _, cx| this.stop_layout(cx)))
             } else {
                 Button::new("graph-layout-run")
                     .icon(Icon::new(IconName::Redo))
                     .ghost()
                     .xsmall()
-                    .tooltip("Re-run layout")
+                    .tip("Re-run layout")
                     .on_click(cx.listener(|this, _, _, cx| this.rerun_layout(cx)))
             })
             .child(
@@ -1239,7 +1282,7 @@ impl GraphView {
                     .ghost()
                     .xsmall()
                     .disabled(!self.can_undo())
-                    .tooltip("Undo the last edit (with preview)")
+                    .tip("Undo the last edit (with preview)")
                     .on_click(cx.listener(|this, _, _, cx| this.undo(cx))),
             )
             .child(
@@ -1248,7 +1291,7 @@ impl GraphView {
                     .ghost()
                     .xsmall()
                     .disabled(!self.can_redo())
-                    .tooltip("Redo (with preview)")
+                    .tip("Redo (with preview)")
                     .on_click(cx.listener(|this, _, _, cx| this.redo(cx))),
             )
             .child(
@@ -1259,17 +1302,17 @@ impl GraphView {
             )
             .child(
                 toggle("graph-mode-clear", "Clear", !self.accumulate)
-                    .tooltip("Each query replaces the graph")
+                    .tip("Each query replaces the graph")
                     .on_click(cx.listener(|this, _, _, cx| this.set_accumulate(false, cx))),
             )
             .child(
                 toggle("graph-mode-accumulate", "Accumulate", self.accumulate)
-                    .tooltip("Each query adds to the graph")
+                    .tip("Each query adds to the graph")
                     .on_click(cx.listener(|this, _, _, cx| this.set_accumulate(true, cx))),
             )
             .child(
                 toggle("graph-edges-between", "Edges between", self.edges_between)
-                    .tooltip("After a vertex-only result, also fetch the edges among the vertices")
+                    .tip("After a vertex-only result, also fetch the edges among the vertices")
                     .on_click(cx.listener(|this, _, _, cx| {
                         let on = !this.edges_between;
                         this.set_edges_between(on, cx)
@@ -1341,6 +1384,8 @@ impl GraphView {
                 div()
                     .id("graph-stats")
                     .test_support()
+                    .role(gpui_kit::Role::Status)
+                    .aria_label(self.selection_summary(cx))
                     .text_size(Tokens::text_xs())
                     .text_color(theme.muted_foreground)
                     .child(stats.text()),
@@ -2030,7 +2075,7 @@ impl GraphView {
             .icon(Icon::new(IconName::ExternalLink))
             .ghost()
             .xsmall()
-            .tooltip("Export or copy")
+            .tip("Export or copy")
             .dropdown_menu(move |mut menu, _, _| {
                 let file = |label: &'static str, kind: ExportKind, view: WeakEntity<GraphView>| {
                     PopupMenuItem::new(label).on_click(move |_, _, cx| {

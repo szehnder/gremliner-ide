@@ -13,6 +13,7 @@ use gpui_kit::*;
 use gremlin_model::normalize;
 use llm::Message;
 use ui_results::GraphView;
+use ui_theme::ButtonTip as _;
 use ui_theme::Tokens;
 
 gpui_kit::actions!(assistant, [OpenPromptBar, ClosePromptBar]);
@@ -318,7 +319,7 @@ impl PromptBar {
                 .icon(IconName::Close)
                 .ghost()
                 .xsmall()
-                .tooltip("Close (Esc)")
+                .tip("Close (Esc)")
                 .on_click(cx.listener(|_, _, _, cx| cx.emit(PromptBarEvent::Close))),
         )
     }

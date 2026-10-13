@@ -23,6 +23,7 @@ use crate::connections::ConnectionManager;
 use crate::io::spawn_io;
 use crate::run::Runner;
 use crate::settings::AppSettings;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 
 /// Counts stop at this many traversers ("≥ 100,000").
@@ -513,7 +514,7 @@ impl Render for DebugView {
                     .label(label)
                     .ghost()
                     .xsmall()
-                    .tooltip(tip)
+                    .tip(tip)
                     .on_click(cx.listener(move |this, _, window, cx| f(this, window, cx)))
             };
         let toolbar = h_flex()
@@ -565,7 +566,7 @@ impl Render for DebugView {
                     .icon(IconName::CircleX)
                     .ghost()
                     .xsmall()
-                    .tooltip("Stop debugging (Shift+F5)")
+                    .tip("Stop debugging (Shift+F5)")
                     .on_click(cx.listener(|_, _, _, cx| cx.emit(DebugViewEvent::Stop))),
             );
         let notes: Vec<String> = self

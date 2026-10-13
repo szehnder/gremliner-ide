@@ -32,6 +32,7 @@ debugger.workspace = true
 
 [dev-dependencies]
 graph-layout.workspace = true
+graph-canvas.workspace = true
 gpui-kit = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 futures = { workspace = true, features = ["executor"] }

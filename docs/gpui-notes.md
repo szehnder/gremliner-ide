@@ -221,3 +221,41 @@ makes the editor read-only.
 
 `ElementSnapshot::disabled()` is `None` for gpui-kit `Button`s: they don't expose the flag. Test a disabled
 button by clicking it and asserting that nothing happened.
+
+## Dialogs: Enter means "confirm"
+
+gpui-kit dialogs bind Enter to `Confirm`, which, without an `on_ok` handler, **closes the dialog**,
+even while focus is in a text field. A form in a dialog needs `.on_ok(|_, window, cx| { submit; false })`
+(return `false` to stay open until the submit succeeds). Enter on a focused button reaches both the button
+and the dialog, so make the submit idempotent while it runs.
+
+## Accessibility: names and the snapshot API
+
+`Button` derives its accessible name from `.label()` or `.accessibility_label()` only, **not** from
+`.tooltip()`. Icon-only buttons use `ui_theme::ButtonTip::tip(text)`, which sets both. Inputs fall back to
+the placeholder; the code `Editor` needs `.aria_label()`. A plain `div` takes `.role(Role::..)` and
+`.aria_label(..)`.
+
+`gpui_kit::base::test_support::snapshots(window)` returns every element registered for observation
+(gpui-kit's own buttons, inputs and tabs register themselves), each with `role()`, `label()`, `visible()`
+and `focused()`. The dock's tab strip (tabs, the "…" menu, close and dock-toggle buttons) has no names and
+no hook to add them.
+
+## Focus and keyboard
+
+`Root` binds Tab and Shift+Tab to `focus_next` and `focus_prev`. Buttons are tab stops and draw a focus ring.
+A clickable `div` is not a tab stop: give it a `cx.focus_handle().tab_stop(true)`, `.track_focus(&handle)`,
+an `on_key_down` for Enter, and `.when(handle.is_focused(window), |d| d.focus_ring_style(window, cx))`
+(`ThemeStyled`). Hover-only actions that are tab stops must also show while focus is inside
+(`handle.contains_focused(window, cx)`), or Tab lands on invisible buttons.
+
+## Reduce motion
+
+`App::reduce_motion()` / `set_reduce_motion()` exist and gpui's `with_animation` and gpui-kit's components
+honour them, but GPUI does not read the OS setting. `ui_workspace::motion` does, and the Motion setting
+decides. Custom animations (the graph camera) check `cx.reduce_motion()` themselves.
+
+## Tests: waiting on GPUI tasks
+
+`futures::executor::block_on(task)` on a GPUI `Task` in a test deadlocks: the task needs the test executor to
+run. Use `cx.foreground_executor().block_test(task)`.

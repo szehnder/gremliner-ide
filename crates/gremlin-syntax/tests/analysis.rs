@@ -169,6 +169,10 @@ fn scenario_gremlin_language_keystroke_latency() {
     }
     times.sort();
     let p95 = times[times.len() * 95 / 100];
+    println!(
+        "measure keystroke_to_diagnostics={:.3} ms",
+        p95.as_secs_f64() * 1000.0
+    );
     // The spec budget is 8 ms on the reference machine; unoptimised test builds get 4x headroom.
     let budget_ms = if cfg!(debug_assertions) { 32 } else { 8 };
     assert!(p95.as_millis() <= budget_ms, "p95 {p95:?}");

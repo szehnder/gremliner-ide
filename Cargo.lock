@@ -8761,6 +8761,7 @@ dependencies = [
  "debugger",
  "futures",
  "gpui-kit",
+ "graph-canvas",
  "graph-layout",
  "graph-store",
  "gremlin-client",

@@ -11,7 +11,12 @@ const GRAPH_CANVAS: &str = ui_results::graph_view::CANVAS_CONTEXT;
 const GRAPH_VIEW: &str = ui_results::graph_view::VIEW_CONTEXT;
 
 pub fn bind_default_keys(cx: &mut App) {
-    cx.bind_keys([
+    cx.bind_keys(default_bindings());
+}
+
+/// Every default binding, in precedence order (the shortcuts sheet lists each bound action).
+pub fn default_bindings() -> Vec<KeyBinding> {
+    vec![
         // The last binding for an action is the one shown in hints, so the primary one comes last.
         KeyBinding::new("f1", OpenCommandPalette, None),
         KeyBinding::new("secondary-shift-p", OpenCommandPalette, None),
@@ -81,5 +86,5 @@ pub fn bind_default_keys(cx: &mut App) {
         ),
         KeyBinding::new("secondary-shift-z", graph::RedoEdit, Some(GRAPH_CANVAS)),
         KeyBinding::new("secondary-z", graph::UndoEdit, Some(GRAPH_CANVAS)),
-    ]);
+    ]
 }

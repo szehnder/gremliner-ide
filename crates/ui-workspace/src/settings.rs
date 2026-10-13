@@ -21,6 +21,54 @@ pub struct GeneralSettings {
     pub result_limit: usize,
     /// Query history entries kept (oldest removed first).
     pub history_limit: usize,
+    pub motion: MotionChoice,
+}
+
+/// Whether transitions animate.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MotionChoice {
+    /// Follow the operating system's reduce-motion preference.
+    #[default]
+    System,
+    Reduce,
+    Full,
+}
+
+impl MotionChoice {
+    pub const ALL: [MotionChoice; 3] = [
+        MotionChoice::System,
+        MotionChoice::Reduce,
+        MotionChoice::Full,
+    ];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            MotionChoice::System => "system",
+            MotionChoice::Reduce => "reduce",
+            MotionChoice::Full => "full",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            MotionChoice::System => "System",
+            MotionChoice::Reduce => "Reduce",
+            MotionChoice::Full => "Full",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.id() == id)
+    }
+
+    pub fn reduce(self, os_reduce: bool) -> bool {
+        match self {
+            MotionChoice::System => os_reduce,
+            MotionChoice::Reduce => true,
+            MotionChoice::Full => false,
+        }
+    }
 }
 
 /// Default and bounds for [`GeneralSettings::result_limit`].
@@ -35,6 +83,7 @@ impl Default for GeneralSettings {
             editor_font_size: DEFAULT_EDITOR_FONT_SIZE,
             result_limit: DEFAULT_RESULT_LIMIT,
             history_limit: storage::DEFAULT_HISTORY_LIMIT,
+            motion: MotionChoice::System,
         }
     }
 }
@@ -71,6 +120,8 @@ pub struct AppSettings {
     storage: Option<Storage>,
     /// Last OS appearance reported by the main window, for `ThemeChoice::System`.
     appearance: WindowAppearance,
+    /// The OS reduce-motion preference, for `MotionChoice::System`.
+    os_reduce_motion: bool,
 }
 
 impl Global for AppSettings {}
@@ -83,6 +134,7 @@ impl AppSettings {
             general: general.normalized(),
             storage,
             appearance,
+            os_reduce_motion: false,
         });
         Self::apply(cx);
     }
@@ -131,10 +183,21 @@ impl AppSettings {
         }
     }
 
+    /// The OS reduce-motion preference was read or changed; re-resolve `MotionChoice::System`.
+    pub fn set_os_reduce_motion(reduce: bool, cx: &mut App) {
+        let this = cx.global_mut::<AppSettings>();
+        if this.os_reduce_motion != reduce {
+            this.os_reduce_motion = reduce;
+            Self::apply(cx);
+        }
+    }
+
     fn apply(cx: &mut App) {
         let this = cx.global::<AppSettings>();
         let general = this.general.clone();
         let appearance = this.appearance;
+        let reduce_motion = general.motion.reduce(this.os_reduce_motion);
+        cx.set_reduce_motion(reduce_motion);
         theme::apply(
             general.theme,
             appearance,

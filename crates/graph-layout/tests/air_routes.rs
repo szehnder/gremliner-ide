@@ -23,6 +23,10 @@ fn scenario_graph_layouts_air_routes_converges_quickly() {
         result = fa2.step(&g, &mut pos, &pinned);
     }
     let elapsed = started.elapsed();
+    println!(
+        "measure fa2_air_routes_converge={:.1} ms",
+        elapsed.as_secs_f64() * 1000.0
+    );
     eprintln!(
         "air-routes: {} nodes, {} edges, {} iterations in {elapsed:?} ({:.2} ms/iteration)",
         g.node_count(),

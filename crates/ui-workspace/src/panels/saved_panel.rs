@@ -15,6 +15,7 @@ use storage::{FolderRow, SavedQueryRow};
 use super::{WorkspacePanel, empty_state, panel_basics};
 use crate::connections::ConnectionManager;
 use crate::saved::SavedLibrary;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 
 /// A saved query being dragged.
@@ -222,7 +223,7 @@ impl SavedPanel {
                             .icon(IconName::Play)
                             .ghost()
                             .xsmall()
-                            .tooltip("Run as report")
+                            .tip("Run as report")
                             .on_click({
                                 let id = id.clone();
                                 move |_, window, cx| {
@@ -247,7 +248,7 @@ impl SavedPanel {
                             .icon(IconName::Replace)
                             .ghost()
                             .xsmall()
-                            .tooltip("Rename")
+                            .tip("Rename")
                             .on_click(move |_, window, cx| {
                                 cx.stop_propagation();
                                 let (id, name) = rename.clone();
@@ -262,7 +263,7 @@ impl SavedPanel {
                             .icon(IconName::Delete)
                             .ghost()
                             .xsmall()
-                            .tooltip("Delete")
+                            .tip("Delete")
                             .on_click(move |_, _, cx| {
                                 cx.stop_propagation();
                                 SavedLibrary::global(cx)
@@ -348,7 +349,7 @@ impl SavedPanel {
                                     .icon(IconName::Plus)
                                     .ghost()
                                     .xsmall()
-                                    .tooltip("New folder inside")
+                                    .tip("New folder inside")
                                     .on_click({
                                         let parent = id.clone();
                                         move |_, window, cx| {
@@ -376,7 +377,7 @@ impl SavedPanel {
                                 .icon(IconName::Replace)
                                 .ghost()
                                 .xsmall()
-                                .tooltip("Rename")
+                                .tip("Rename")
                                 .on_click(
                                     move |_, window, cx| {
                                         cx.stop_propagation();
@@ -402,7 +403,7 @@ impl SavedPanel {
                                 .icon(IconName::Delete)
                                 .ghost()
                                 .xsmall()
-                                .tooltip("Delete")
+                                .tip("Delete")
                                 .on_click(
                                     move |_, window, cx| {
                                         cx.stop_propagation();
@@ -449,7 +450,7 @@ impl Panel for SavedPanel {
                 .icon(IconName::Folder)
                 .ghost()
                 .xsmall()
-                .tooltip("New folder")
+                .tip("New folder")
                 .on_click(|_, window, cx| {
                     ask_name("New folder", "New folder", window, cx, |name, cx| {
                         SavedLibrary::global(cx)

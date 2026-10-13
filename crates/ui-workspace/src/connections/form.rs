@@ -39,10 +39,16 @@ pub fn open(
     let view = form.clone();
     let focus = form.read(cx).name.clone();
     window.open_dialog(cx, move |dialog, _, _| {
+        let submit = view.clone();
         dialog
             .title(title)
             .w(Tokens::CONNECTION_DIALOG_WIDTH)
             .margin_top(Tokens::DIALOG_TOP)
+            // Enter anywhere in the form saves it; the dialog closes only once the save succeeds.
+            .on_ok(move |_, window, cx| {
+                submit.update(cx, |form, cx| form.save(window, cx));
+                false
+            })
             .child(view.clone())
     });
     window.defer(cx, move |window, cx| {
@@ -599,6 +605,10 @@ impl ConnectionForm {
     }
 
     pub fn save(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        // Enter on the focused Save button reaches both the button and the dialog's confirm.
+        if self.saving {
+            return;
+        }
         let (config, password) = match self.to_config(cx) {
             Ok(v) => v,
             Err(errors) => {

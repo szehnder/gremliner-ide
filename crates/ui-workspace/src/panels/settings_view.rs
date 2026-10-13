@@ -10,7 +10,7 @@ use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, Window
 use gpui_kit::*;
 
 use super::{WorkspacePanel, panel_basics};
-use crate::settings::{AppSettings, GeneralSettings};
+use crate::settings::{AppSettings, GeneralSettings, MotionChoice};
 use crate::theme::{MAX_FONT_SIZE, MIN_FONT_SIZE, ThemeChoice};
 
 pub struct SettingsPanel {
@@ -120,6 +120,26 @@ fn general_page() -> SettingPage {
                     )
                     .description(
                         "System follows your operating system's light or dark appearance.",
+                    ),
+                )
+                .item(
+                    SettingItem::new(
+                        "Motion",
+                        SettingField::dropdown(
+                            MotionChoice::ALL
+                                .iter()
+                                .map(|c| (c.id().into(), c.label().into()))
+                                .collect(),
+                            |cx| AppSettings::general(cx).motion.id().into(),
+                            |value, cx| {
+                                let choice = MotionChoice::from_id(&value).unwrap_or_default();
+                                AppSettings::update_general(cx, |g| g.motion = choice);
+                            },
+                        )
+                        .default_value(SharedString::from(defaults.motion.id())),
+                    )
+                    .description(
+                        "Reduce makes panel and graph transitions instant. System follows your operating system's reduce-motion preference.",
                     ),
                 )
                 .item(

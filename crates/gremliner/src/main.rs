@@ -3,6 +3,8 @@
 //! Normal runs open the workspace shell. `--graph-demo` and `--render-bench` open the bare graph canvas
 //! used by the rendering gate (ADR-0006, ADR-0032).
 
+mod measure;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -44,6 +46,15 @@ struct Args {
     /// Open a tab with this query and run it on startup (on `--open-connection`'s connection).
     #[arg(long, value_name = "GREMLIN")]
     run: Option<String>,
+    /// Don't offer the first-run tour (scripted screenshots of other surfaces).
+    #[arg(long)]
+    no_tour: bool,
+    /// Print the time from launch to the first frame (`measure first_frame_ms=..`), then quit.
+    #[arg(long)]
+    measure_startup: bool,
+    /// Stay idle this many seconds, print resident memory (`measure idle_rss=.. MB`), then quit.
+    #[arg(long, value_name = "SECONDS")]
+    measure_idle_memory: Option<f32>,
     /// Run the scripted render benchmark on a synthetic graph: NODES,EDGES (e.g. 10000,20000), then exit.
     #[arg(long, value_name = "NODES,EDGES")]
     render_bench: Option<String>,
@@ -110,6 +121,7 @@ fn init_logging() {
 }
 
 fn main() {
+    measure::mark_start();
     init_logging();
     let args = Args::parse();
     let graph = args
@@ -149,6 +161,7 @@ fn main() {
                     },
                     cx,
                 );
+                ui_workspace::motion::watch_os_preference(cx);
                 open_workspace(&args, geometry, cx);
             }
             cx.on_window_closed(|cx, _| {
@@ -157,6 +170,19 @@ fn main() {
                 }
             })
             .detach();
+            if let Some(secs) = args.measure_idle_memory {
+                cx.spawn(async move |cx| {
+                    cx.background_executor()
+                        .timer(Duration::from_secs_f32(secs))
+                        .await;
+                    match measure::resident_mb() {
+                        Some(mb) => measure::report("idle_rss", mb, "MB"),
+                        None => log::error!("resident memory is not available on this platform"),
+                    }
+                    cx.update(|cx| cx.quit());
+                })
+                .detach();
+            }
             if let Some(secs) = args.exit_after {
                 cx.spawn(async move |cx| {
                     cx.background_executor()
@@ -190,6 +216,8 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
     };
     let workspace_options = WorkspaceOptions {
         perf_hud: args.perf_hud,
+        // Benchmarks and scripted screenshots start from a clean slate without the tour card.
+        tour: !args.no_tour,
     };
     let opened = gpui_kit::open_window(options, cx, move |window, cx| {
         let workspace = cx.new(|cx| Workspace::new(workspace_options, window, cx));
@@ -213,10 +241,16 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
             }
             let run = args.run.clone();
             let workspace = workspace.clone();
+            let measure_startup = args.measure_startup;
             let _ = handle.update(cx, |_, window, _| {
                 // Actions route through the rendered element tree, so they wait for the first frame.
                 window.on_next_frame(move |window, cx| {
                     log::info!("first frame rendered");
+                    if measure_startup {
+                        measure::report("first_frame_ms", measure::since_start_ms(), "ms");
+                        cx.quit();
+                        return;
+                    }
                     if let Some(query) = &run {
                         workspace
                             .update(cx, |ws, cx| ws.open_and_run(query, connection, window, cx));

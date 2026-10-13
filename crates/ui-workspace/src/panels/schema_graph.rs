@@ -20,6 +20,7 @@ use uuid::Uuid;
 use super::{WorkspacePanel, empty_state, panel_basics};
 use crate::connections::ConnectionManager;
 use crate::schema::SchemaRegistry;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 
 pub struct SchemaGraphPanel {
@@ -218,7 +219,7 @@ impl Render for SchemaGraphPanel {
                         .icon(IconName::RefreshCw)
                         .ghost()
                         .xsmall()
-                        .tooltip("Refresh schema")
+                        .tip("Refresh schema")
                         .disabled(refreshing)
                         .on_click(cx.listener(move |_, _, _, cx| {
                             if let (Some(id), Some(registry)) = (id, SchemaRegistry::try_global(cx))

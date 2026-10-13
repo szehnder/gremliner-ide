@@ -53,6 +53,8 @@ pub struct Runner {
     graphs: HashMap<Uuid, Entity<GraphView>>,
     /// The connection each tab last ran against (graph follow-ups use it).
     tab_connection: HashMap<Uuid, Uuid>,
+    /// The last request made, for "Run again" on an error.
+    last_request: Option<RunRequest>,
     _graph_subscriptions: Vec<Subscription>,
 }
 
@@ -91,6 +93,13 @@ impl Runner {
     /// The tab that ran last.
     pub fn latest_tab(&self) -> Option<Uuid> {
         self.latest_tab
+    }
+
+    /// Repeat the last request (the error state's "Run again").
+    pub fn retry(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if let Some(request) = self.last_request.clone() {
+            self.request(request, window, cx);
+        }
     }
 
     pub fn result_for_tab(&self, tab: Uuid) -> Option<&Entity<ResultSet>> {
@@ -361,6 +370,7 @@ impl Runner {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        self.last_request = Some(request.clone());
         let manager = ConnectionManager::global(cx);
         let Some(config) = request
             .connection_id

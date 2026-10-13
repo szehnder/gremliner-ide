@@ -19,6 +19,7 @@ use crate::profile_view::{ProfileView, ProfileViewEvent};
 use crate::result_set::Analysis;
 use crate::result_set::{ResultSet, RunStatus};
 use crate::table_view::TableView;
+use ui_theme::ButtonTip as _;
 
 /// While streaming, views rebuild at most this often (the summary updates on every batch).
 const STREAM_REFRESH: Duration = Duration::from_millis(100);
@@ -60,6 +61,10 @@ impl From<PreferredView> for ViewKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResultsViewEvent {
     CancelRequested,
+    /// The error state's "Run again".
+    RetryRequested,
+    /// The error state's "Fix with assistant".
+    FixRequested,
     /// A profile step was selected: highlight this range of the editor document (`None`: clear).
     HighlightSource(Option<std::ops::Range<usize>>),
 }
@@ -475,7 +480,7 @@ impl ResultsView {
                         .icon(IconName::CircleX)
                         .ghost()
                         .xsmall()
-                        .tooltip("Cancel (Esc)")
+                        .tip("Cancel (Esc)")
                         .on_click(
                             cx.listener(|_, _, _, cx| cx.emit(ResultsViewEvent::CancelRequested)),
                         ),
@@ -557,7 +562,7 @@ impl ResultsView {
             .into_any_element()
     }
 
-    fn render_error(&self, cx: &App) -> Option<AnyElement> {
+    fn render_error(&self, cx: &mut Context<'_, Self>) -> Option<AnyElement> {
         let r = self.result.as_ref()?.read(cx);
         let RunStatus::Failed(error) = &r.status else {
             return None;
@@ -600,10 +605,29 @@ impl ResultsView {
                         .child(error.message.clone()),
                 )
                 .child(
-                    div()
-                        .text_size(Tokens::text_sm())
-                        .text_color(theme.muted_foreground)
-                        .child("The assistant will be able to suggest a fix here."),
+                    h_flex()
+                        .gap(Tokens::space(2.0))
+                        .pt(Tokens::space(1.0))
+                        .child(
+                            Button::new("results-error-retry")
+                                .label("Run again")
+                                .icon(IconName::Redo2)
+                                .small()
+                                .outline()
+                                .on_click(cx.listener(|_, _, _, cx| {
+                                    cx.emit(ResultsViewEvent::RetryRequested);
+                                })),
+                        )
+                        .child(
+                            Button::new("results-error-fix")
+                                .label("Fix with assistant")
+                                .icon(IconName::Bot)
+                                .small()
+                                .ghost()
+                                .on_click(cx.listener(|_, _, _, cx| {
+                                    cx.emit(ResultsViewEvent::FixRequested);
+                                })),
+                        ),
                 )
                 .into_any_element(),
         )

@@ -26,6 +26,7 @@ use crate::connections::ConnectionManager;
 use crate::connections::style::{color_tag_color, environment_badge};
 use crate::saved::{SaveQueryForm, SavedLibrary, TabSettings};
 use crate::settings::AppSettings;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
@@ -897,7 +898,7 @@ impl EditorPanel {
             .icon(IconName::Settings)
             .ghost()
             .xsmall()
-            .tooltip("Tab settings")
+            .tip("Tab settings")
             .dropdown_menu(move |mut menu, _, _| {
                 let set = |f: Box<dyn Fn(&mut TabSettings)>, this: WeakEntity<EditorPanel>| {
                     move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
@@ -1102,7 +1103,7 @@ impl Render for EditorPanel {
                     .icon(crate::assets::icons::IconName::Sparkles)
                     .ghost()
                     .xsmall()
-                    .tooltip("Describe what you want in plain English (Ctrl+K)")
+                    .tip("Describe what you want in plain English (Ctrl+K)")
                     .on_click(cx.listener(|this, _, window, cx| this.open_prompt_bar(window, cx))),
             )
             .child(
@@ -1110,7 +1111,7 @@ impl Render for EditorPanel {
                     .label("Format")
                     .ghost()
                     .xsmall()
-                    .tooltip("Format (Shift+Alt+F)")
+                    .tip("Format (Shift+Alt+F)")
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.editor
                             .update(cx, |e, cx| e.format(&FormatQuery, window, cx));
@@ -1122,7 +1123,7 @@ impl Render for EditorPanel {
                     .label("Debug")
                     .ghost()
                     .xsmall()
-                    .tooltip("Step through the statement (Ctrl+F5)")
+                    .tip("Step through the statement (Ctrl+F5)")
                     .on_click(cx.listener(|this, _, window, cx| this.start_debug(window, cx))),
             )
             .child(
@@ -1130,7 +1131,7 @@ impl Render for EditorPanel {
                     .label("Explain")
                     .ghost()
                     .xsmall()
-                    .tooltip("Show how the database plans the statement")
+                    .tip("Show how the database plans the statement")
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.editor
                             .update(cx, |e, cx| e.explain(&ExplainQuery, window, cx));
@@ -1141,7 +1142,7 @@ impl Render for EditorPanel {
                     .label("Profile")
                     .ghost()
                     .xsmall()
-                    .tooltip("Run with profiling (Ctrl+Shift+Enter)")
+                    .tip("Run with profiling (Ctrl+Shift+Enter)")
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.editor
                             .update(cx, |e, cx| e.profile(&ProfileQuery, window, cx));
@@ -1153,7 +1154,7 @@ impl Render for EditorPanel {
                     .icon(IconName::Play)
                     .primary()
                     .xsmall()
-                    .tooltip("Run the statement at the cursor (Ctrl+Enter)")
+                    .tip("Run the statement at the cursor (Ctrl+Enter)")
                     .on_click(cx.listener(|this, _, window, cx| {
                         this.editor.update(cx, |e, cx| e.run(&RunQuery, window, cx));
                     })),

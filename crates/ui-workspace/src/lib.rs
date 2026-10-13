@@ -9,6 +9,7 @@ pub mod assets;
 pub mod connections;
 pub mod io;
 pub mod keymap;
+pub mod motion;
 pub mod palette;
 pub mod panels;
 pub mod perf_hud;
@@ -17,8 +18,10 @@ pub mod run;
 pub mod saved;
 pub mod schema;
 pub mod settings;
+pub mod shortcuts;
 pub mod status_bar;
 pub mod styles;
+pub mod tour;
 pub mod workspace;
 
 use gpui_kit::App;
@@ -91,10 +94,13 @@ pub fn init(config: ShellConfig, cx: &mut App) {
 
 fn register_commands(cx: &mut App) {
     for meta in [
+        CommandMeta::new("View", "Show All Commands", OpenCommandPalette)
+            .keywords(&["palette", "actions"]),
         CommandMeta::new("View", "Toggle Sidebar", ToggleSidebar),
         CommandMeta::new("View", "Toggle Results Dock", ToggleResultsDock)
             .keywords(&["panel", "bottom"]),
         CommandMeta::new("View", "Toggle Right Panel", ToggleRightPanel).keywords(&["inspector"]),
+        CommandMeta::new("View", "Toggle Assistant", ToggleAssistant).keywords(&["ai", "chat"]),
         CommandMeta::new("View", "Reset Layout", ResetLayout),
         CommandMeta::new("View", "Zoom In", ZoomIn).keywords(&["font", "bigger"]),
         CommandMeta::new("View", "Zoom Out", ZoomOut).keywords(&["font", "smaller"]),
@@ -134,6 +140,9 @@ fn register_commands(cx: &mut App) {
         CommandMeta::new("Editor", "Explain Query", editor::ExplainQuery)
             .when(When::EditorOpen)
             .keywords(&["plan", "strategies"]),
+        CommandMeta::new("Editor", "Cancel Query", CancelQuery)
+            .when(When::EditorOpen)
+            .keywords(&["stop", "abort"]),
         CommandMeta::new("Editor", "Format Query", editor::FormatQuery).when(When::EditorOpen),
         CommandMeta::new("Debug", "Debug Query", debug::StartDebug)
             .when(When::EditorOpen)
@@ -150,6 +159,15 @@ fn register_commands(cx: &mut App) {
         )
         .when(When::EditorOpen)
         .keywords(&["ai", "natural language", "llm", "prompt"]),
+        CommandMeta::new("Assistant", "Fix Query Error", FixQueryError)
+            .when(When::EditorOpen)
+            .keywords(&["ai", "repair", "failed"]),
+        CommandMeta::new(
+            "Assistant",
+            "Close Prompt Bar",
+            ui_assistant::ClosePromptBar,
+        )
+        .when(When::EditorOpen),
         CommandMeta::new("Editor", "Toggle Line Comment", editor::ToggleLineComment)
             .when(When::EditorOpen),
         CommandMeta::new("Editor", "Split Right", SplitRight).when(When::EditorOpen),

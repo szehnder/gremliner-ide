@@ -16,6 +16,7 @@ use uuid::Uuid;
 use super::{WorkspacePanel, empty_state, panel_basics};
 use crate::connections::ConnectionManager;
 use crate::saved::HistoryLog;
+use crate::theme::ButtonTip as _;
 use crate::theme::Tokens;
 
 /// Entries listed at once.
@@ -197,7 +198,7 @@ impl Panel for HistoryPanel {
                 .icon(IconName::Delete)
                 .ghost()
                 .xsmall()
-                .tooltip("Clear history")
+                .tip("Clear history")
                 .on_click(|_, window, cx| HistoryPanel::clear(window, cx)),
         ])
     }

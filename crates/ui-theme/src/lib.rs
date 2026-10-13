@@ -124,6 +124,49 @@ pub fn clamp_font_size(size: f32) -> f32 {
     }
 }
 
+/// Tooltip plus accessible name for icon-only buttons: a tooltip alone is not announced, and an icon
+/// button has no label for gpui-kit to fall back on.
+pub trait ButtonTip {
+    fn tip(self, text: impl Into<SharedString>) -> Self;
+}
+
+impl ButtonTip for gpui_kit::component::button::Button {
+    fn tip(self, text: impl Into<SharedString>) -> Self {
+        let text = text.into();
+        self.accessibility_label(text.clone()).tooltip(text)
+    }
+}
+
+/// Standard motion durations (ADR-0023: 120/200/320 ms, ease-out).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Motion {
+    /// Hover and press feedback, toasts.
+    Fast,
+    /// Panels and dialogs.
+    Normal,
+    /// Camera moves (graph focus and fit).
+    Slow,
+}
+
+impl Motion {
+    pub const fn millis(self) -> u64 {
+        match self {
+            Motion::Fast => 120,
+            Motion::Normal => 200,
+            Motion::Slow => 320,
+        }
+    }
+
+    /// The duration to animate for: zero when reduce motion is on, so transitions happen instantly.
+    pub fn duration(self, cx: &App) -> std::time::Duration {
+        if cx.reduce_motion() {
+            std::time::Duration::ZERO
+        } else {
+            std::time::Duration::from_millis(self.millis())
+        }
+    }
+}
+
 /// Spacing, radii and component sizes. Spacing is in rems so it scales with the UI font size: at the
 /// default 14 px, `space(1)` is exactly 4 px (ADR-0023's 4 px grid).
 pub struct Tokens;
@@ -164,6 +207,14 @@ impl Tokens {
     /// Max height of the command palette list.
     pub fn palette_list_height() -> Rems {
         Self::size(380.0)
+    }
+    /// Width of the first-run tour card.
+    pub fn tour_width() -> Rems {
+        Self::size(360.0)
+    }
+    /// Max height of the keyboard shortcuts list.
+    pub fn shortcuts_height() -> Rems {
+        Self::size(520.0)
     }
     /// Max width of the welcome view content column.
     pub fn welcome_width() -> Rems {
