@@ -38,7 +38,8 @@ cargo xtask ci                       # everything CI runs
 cargo xtask testenv up|seed|down     # Docker gremlin-server with modern/crew/air-routes
 cargo run -p gremliner               # the app
 cargo run -p gremliner-cli -- query --url ws://localhost:8182/gremlin "g.V().count()"
-cargo xtask bench --check            # performance budgets (ADR-0027)
+cargo xtask bench --check            # performance budgets (ADR-0027); app measurements open windows: keep them visible
+cargo xtask bench --check --ci       # relative-only, no windows (what CI runs against the main baseline)
 openspec list && openspec validate --all --strict
 ```
 

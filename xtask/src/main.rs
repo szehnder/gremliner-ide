@@ -1,5 +1,6 @@
 //! Project automation: `cargo xtask <command>`. See AGENTS.md.
 
+mod bench;
 mod grammar;
 mod layering;
 mod screenshot;
@@ -48,9 +49,18 @@ enum Cmd {
         /// List the budgets defined in perf-budgets.toml.
         #[arg(long)]
         list: bool,
-        /// Check measurements against budgets (implemented by `performance-budgets`).
+        /// Measure and compare with perf-budgets.toml (absolute) and perf-baseline.json (relative).
         #[arg(long)]
         check: bool,
+        /// CI mode: relative regressions only, no app (window) measurements.
+        #[arg(long)]
+        ci: bool,
+        /// Write the measurements to perf-baseline.json.
+        #[arg(long)]
+        update_baseline: bool,
+        /// Only these budgets (repeatable).
+        #[arg(long = "only", value_name = "BUDGET")]
+        only: Vec<String>,
     },
     /// Run the assistant's golden prompts with an LLM profile against the testenv (needs the testenv
     /// and a saved profile; the quality gate for nl-to-gremlin).
@@ -96,7 +106,22 @@ fn main() -> Result<()> {
         Cmd::Tokens => tokens::check(&root),
         Cmd::SpecCoverage { enforce } => spec_coverage::run(&root, enforce),
         Cmd::Testenv { cmd } => testenv::run(&root, cmd),
-        Cmd::Bench { list, check } => bench(&root, list, check),
+        Cmd::Bench {
+            list,
+            check,
+            ci,
+            update_baseline,
+            only,
+        } => bench::run(
+            &root,
+            bench::Options {
+                list,
+                check,
+                ci,
+                update_baseline,
+                only,
+            },
+        ),
         Cmd::Grammar { test } => grammar::run(&root, test),
         Cmd::EvalAssistant { profile, min } => {
             let status = std::process::Command::new(env!("CARGO"))
@@ -143,10 +168,6 @@ fn workspace_root() -> PathBuf {
         .parent()
         .expect("xtask lives in the workspace root")
         .to_path_buf()
-}
-
-fn not_yet(what: &str, change: &str) -> Result<()> {
-    bail!("`cargo xtask {what}` is not implemented yet; see openspec/changes/{change}")
 }
 
 pub(crate) fn run(step: &str, cmd: &mut Command) -> Result<()> {
@@ -196,8 +217,9 @@ fn ci(root: &Path, no_test: bool) -> Result<()> {
             "\n==> openspec validate: skipped (openspec CLI not on PATH; `npm i -g @fission-ai/openspec`)"
         );
     }
-    eprintln!("\n==> spec coverage (report)");
-    spec_coverage::run(root, false)?;
+    // Archived specs must be fully covered; in-flight changes are reported only.
+    eprintln!("\n==> spec coverage (enforced for archived specs)");
+    spec_coverage::run(root, true)?;
     eprintln!("\nCI passed.");
     Ok(())
 }
@@ -206,35 +228,4 @@ fn which(bin: &str) -> bool {
     std::env::var_os("PATH")
         .map(|paths| std::env::split_paths(&paths).any(|p| p.join(bin).is_file()))
         .unwrap_or(false)
-}
-
-#[derive(serde::Deserialize)]
-struct Budgets {
-    budget: Vec<Budget>,
-}
-
-#[derive(serde::Deserialize)]
-struct Budget {
-    name: String,
-    metric: String,
-    max: f64,
-    unit: String,
-    change: String,
-}
-
-fn bench(root: &Path, list: bool, check: bool) -> Result<()> {
-    let text = std::fs::read_to_string(root.join("perf-budgets.toml"))?;
-    let budgets: Budgets = toml::from_str(&text).context("parsing perf-budgets.toml")?;
-    if list || !check {
-        for b in &budgets.budget {
-            println!(
-                "{:<28} {:<10} <= {:>8} {:<6} ({})",
-                b.name, b.metric, b.max, b.unit, b.change
-            );
-        }
-    }
-    if check {
-        return not_yet("bench --check", "performance-budgets");
-    }
-    Ok(())
 }

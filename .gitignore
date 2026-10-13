@@ -4,3 +4,4 @@
 /testenv/data/*.graphml
 *.profraw
 /.env
+perf-baseline.json

@@ -1,5 +1,6 @@
-//! GraphSON v3 decode throughput on a ~10 MB response of edges with properties
-//! (budget `graphson_decode_10mb` in perf-budgets.toml: median ≤ 60 ms).
+//! GraphSON v3 decode throughput on a ~10 MB response of edges with properties. The budget
+//! `graphson_decode_10mb` in perf-budgets.toml (median ≤ 60 ms) applies to `simd_decode_10mb`, the path the
+//! client uses (ADR-0033); `graphson_decode_10mb` is the serde_json streaming variant, kept for comparison.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

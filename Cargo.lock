@@ -3822,6 +3822,7 @@ dependencies = [
  "graph-canvas",
  "graph-store",
  "log",
+ "providers",
  "storage",
  "tokio",
  "ui-workspace",

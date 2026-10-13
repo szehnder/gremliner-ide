@@ -42,3 +42,4 @@ One decision per file, MADR-style (see [0001](0001-record-architecture-decisions
 | [0036](0036-neptune-transport-details.md) | Neptune transport: ring-only AWS stack, tunnels, HTTP features, restriction table (amends 0016) | accepted |
 | [0037](0037-localstack-discovery-details.md) | LocalStack Neptune discovery details and engine version table (amends 0017) | accepted |
 | [0038](0038-resvg-for-image-export.md) | Graph image export through SVG and resvg (amends 0006) | accepted |
+| [0039](0039-hybrid-gpu-driver-selection.md) | Hide unused discrete-GPU drivers on hybrid Linux laptops (amends 0027) | accepted |

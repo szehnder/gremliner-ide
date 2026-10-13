@@ -3,6 +3,7 @@
 //! Normal runs open the workspace shell. `--graph-demo` and `--render-bench` open the bare graph canvas
 //! used by the rendering gate (ADR-0006, ADR-0032).
 
+mod gpu;
 mod measure;
 
 use std::path::PathBuf;
@@ -123,6 +124,8 @@ fn init_logging() {
 fn main() {
     measure::mark_start();
     init_logging();
+    // Before any thread starts (it sets environment variables for the GPU loaders).
+    gpu::select_drivers();
     let args = Args::parse();
     let graph = args
         .render_bench
@@ -137,17 +140,21 @@ fn main() {
         .expect("failed to start the I/O runtime");
     // The runtime lives as long as the process; worker threads end with it.
     let runtime: &'static tokio::runtime::Runtime = Box::leak(Box::new(runtime));
+    measure::checkpoint("runtime started");
     let storage = if graph.is_some() {
         None
     } else {
         open_storage(&args)
     };
+    measure::checkpoint("storage opened");
     let geometry = storage.as_ref().and_then(persist::load_window);
 
     gpui_kit::application()
         .with_assets(AppAssets)
         .run(move |cx| {
+            measure::checkpoint("platform ready");
             gpui_kit::init(cx);
+            measure::checkpoint("gpui-kit initialised");
             ui_workspace::io::install(runtime.handle().clone(), cx);
 
             if let Some((nodes, edges)) = graph {
@@ -161,8 +168,10 @@ fn main() {
                     },
                     cx,
                 );
+                measure::checkpoint("shell initialised");
                 ui_workspace::motion::watch_os_preference(cx);
                 open_workspace(&args, geometry, cx);
+                measure::checkpoint("window opened");
             }
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {
@@ -220,7 +229,9 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
         tour: !args.no_tour,
     };
     let opened = gpui_kit::open_window(options, cx, move |window, cx| {
+        measure::checkpoint("renderer ready");
         let workspace = cx.new(|cx| Workspace::new(workspace_options, window, cx));
+        measure::checkpoint("workspace built");
         window.focus(&workspace.read(cx).focus_handle().clone(), cx);
         workspace
     });

@@ -37,6 +37,7 @@ pub fn run(root: &Path, enforce: bool) -> Result<()> {
 
     let mut tests = HashSet::new();
     collect_test_names(&root.join("crates"), &mut tests)?;
+    collect_test_names(&root.join("xtask"), &mut tests)?;
 
     let unmapped: Vec<&Scenario> = scenarios
         .iter()
@@ -56,10 +57,15 @@ pub fn run(root: &Path, enforce: bool) -> Result<()> {
         }
     }
     if enforce && archived_unmapped > 0 {
-        for s in unmapped.iter().filter(|s| s.archived) {
-            eprintln!("  missing {}", s.test_name());
-        }
-        bail!("{archived_unmapped} archived scenario(s) have no test");
+        let list: Vec<String> = unmapped
+            .iter()
+            .filter(|s| s.archived)
+            .map(|s| format!("  missing {}  ({})", s.test_name(), s.title))
+            .collect();
+        bail!(
+            "{archived_unmapped} archived scenario(s) have no test:\n{}",
+            list.join("\n")
+        );
     }
     Ok(())
 }
@@ -145,7 +151,36 @@ pub fn snake(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::snake;
+    use super::{run, snake};
+
+    #[test]
+    fn scenario_performance_budgets_missing_scenario_test() {
+        let root = std::env::temp_dir().join(format!("spec-coverage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let spec = root.join("openspec/specs/demo");
+        std::fs::create_dir_all(&spec).unwrap();
+        std::fs::write(
+            spec.join("spec.md"),
+            "### Requirement: X\n#### Scenario: Has a test\n- **WHEN** a\n#### Scenario: Has none\n- **WHEN** b\n",
+        )
+        .unwrap();
+        let tests = root.join("crates/demo/tests");
+        std::fs::create_dir_all(&tests).unwrap();
+        std::fs::write(
+            tests.join("t.rs"),
+            "#[test]\nfn scenario_demo_has_a_test() {}\n",
+        )
+        .unwrap();
+
+        let err = run(&root, true).unwrap_err().to_string();
+        assert!(
+            err.contains("scenario_demo_has_none"),
+            "lists the scenario: {err}"
+        );
+        assert!(!err.contains("scenario_demo_has_a_test"), "{err}");
+        assert!(run(&root, false).is_ok(), "report mode does not fail");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn snake_cases_titles() {

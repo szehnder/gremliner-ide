@@ -1,5 +1,6 @@
 # Performance budgets (ADR-0027). Absolute values apply on the reference machine; CI checks relative
-# regressions (>15%) against perf-baseline.json. `change` names the OpenSpec change that adds the measurement.
+# regressions (>15%) against perf-baseline.json. `change` names the OpenSpec change that adds the measurement;
+# `source` says how `cargo xtask bench --check` measures it (see xtask/src/bench.rs).
 
 [[budget]]
 name = "cold_start_first_frame"
@@ -7,6 +8,7 @@ metric = "median"
 max = 300
 unit = "ms"
 change = "performance-budgets"
+source = { kind = "app", args = ["--measure-startup"], runs = 10, measure = "first_frame_ms" }
 
 [[budget]]
 name = "idle_rss"
@@ -14,6 +16,7 @@ metric = "max"
 max = 150
 unit = "MB"
 change = "performance-budgets"
+source = { kind = "app", args = ["--command", "workspace::NewQueryTab", "--measure-idle-memory", "30"], connection = "ws://localhost:8182/gremlin", measure = "idle_rss" }
 
 [[budget]]
 name = "keystroke_to_diagnostics"
@@ -21,6 +24,7 @@ metric = "p95"
 max = 8
 unit = "ms"
 change = "gremlin-language"
+source = { kind = "test", package = "gremlin-syntax", test = "analysis", name = "scenario_gremlin_language_keystroke_latency" }
 
 [[budget]]
 name = "completion_latency"
@@ -28,6 +32,7 @@ metric = "p95"
 max = 30
 unit = "ms"
 change = "autocomplete"
+source = { kind = "test", package = "gremlin-syntax", test = "complete", name = "scenario_autocomplete_completion_speed" }
 
 [[budget]]
 name = "graphson_decode_10mb"
@@ -35,6 +40,7 @@ metric = "median"
 max = 60
 unit = "ms"
 change = "gremlin-client"
+source = { kind = "criterion", package = "gremlin-model", bench = "graphson_decode", id = "graphson/simd_decode_10mb" }
 
 [[budget]]
 name = "canvas_frame_10k_20k"
@@ -42,6 +48,7 @@ metric = "p95"
 max = 8.3
 unit = "ms"
 change = "graph-canvas-spike"
+source = { kind = "app", args = ["--render-bench", "10000,20000", "--bench-seconds", "8"], render_p95 = true }
 
 [[budget]]
 name = "canvas_frame_50k_100k"
@@ -49,6 +56,7 @@ metric = "p95"
 max = 16.7
 unit = "ms"
 change = "graph-canvas-spike"
+source = { kind = "app", args = ["--render-bench", "50000,100000", "--bench-seconds", "8"], render_p95 = true }
 
 [[budget]]
 name = "fa2_air_routes_converge"
@@ -56,6 +64,7 @@ metric = "median"
 max = 2000
 unit = "ms"
 change = "graph-layouts"
+source = { kind = "test", package = "graph-layout", test = "air_routes", name = "scenario_graph_layouts_air_routes_converges_quickly" }
 
 [[budget]]
 name = "table_scroll_100k_frame"
@@ -63,6 +72,7 @@ metric = "max"
 max = 16
 unit = "ms"
 change = "query-execution"
+source = { kind = "test", package = "ui-results", test = "views", name = "scenario_results_table_scroll_100k_rows" }
 
 [[budget]]
 name = "editor_typing_10k_lines"
@@ -70,3 +80,4 @@ metric = "p95"
 max = 16
 unit = "ms"
 change = "query-editor"
+source = { kind = "test", package = "ui-workspace", test = "editor", name = "scenario_query_editor_large_file_typing" }

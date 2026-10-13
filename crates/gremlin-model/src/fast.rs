@@ -460,36 +460,51 @@ impl<'de> Visitor<'de> for EdgeVisitor {
         while let Some(k) = map.next_key::<std::borrow::Cow<'de, str>>()? {
             match &*k {
                 "id" => e.id = Box::new(map.next_value_seed(AnyValue)?),
-                "label" => e.label = string_of(map.next_value_seed(AnyValue)?),
+                "label" => e.label = map.next_value::<String>()?,
                 "outV" => e.out_v = Box::new(map.next_value_seed(AnyValue)?),
                 "inV" => e.in_v = Box::new(map.next_value_seed(AnyValue)?),
-                "outVLabel" => e.out_v_label = string_of(map.next_value_seed(AnyValue)?),
-                "inVLabel" => e.in_v_label = string_of(map.next_value_seed(AnyValue)?),
-                "properties" => {
-                    if let GValue::Map(m) = map.next_value_seed(AnyValue)? {
-                        for (k, v) in m {
-                            if let crate::GKey::String(k) = k {
-                                let value = match v {
-                                    GValue::Property(p) => *p.value,
-                                    other => other,
-                                };
-                                e.properties.insert(
-                                    k.clone(),
-                                    Property {
-                                        key: k,
-                                        value: Box::new(value),
-                                    },
-                                );
-                            }
-                        }
-                    }
-                }
+                "outVLabel" => e.out_v_label = map.next_value::<String>()?,
+                "inVLabel" => e.in_v_label = map.next_value::<String>()?,
+                "properties" => map.next_value_seed(EdgeProperties(&mut e.properties))?,
                 _ => {
                     map.next_value::<IgnoredAny>()?;
                 }
             }
         }
         Ok(GValue::Edge(e))
+    }
+}
+
+/// An edge's `properties` object (`{key: g:Property | value}`), decoded straight into the edge's map.
+struct EdgeProperties<'a>(&'a mut IndexMap<String, Property>);
+
+impl<'de> DeserializeSeed<'de> for EdgeProperties<'_> {
+    type Value = ();
+    fn deserialize<D: Deserializer<'de>>(self, d: D) -> Result<(), D::Error> {
+        d.deserialize_map(self)
+    }
+}
+
+impl<'de> Visitor<'de> for EdgeProperties<'_> {
+    type Value = ();
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("an edge properties object")
+    }
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
+        while let Some(k) = map.next_key::<String>()? {
+            let value = match map.next_value_seed(AnyValue)? {
+                GValue::Property(p) => *p.value,
+                other => other,
+            };
+            self.0.insert(
+                k.clone(),
+                Property {
+                    key: k,
+                    value: Box::new(value),
+                },
+            );
+        }
+        Ok(())
     }
 }
 

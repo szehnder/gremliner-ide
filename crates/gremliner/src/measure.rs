@@ -18,6 +18,11 @@ pub fn since_start_ms() -> f64 {
         .map_or(0.0, |t| t.elapsed().as_secs_f64() * 1000.0)
 }
 
+/// Log a startup checkpoint (`RUST_LOG=gremliner=debug`).
+pub fn checkpoint(what: &str) {
+    log::debug!("startup: {what} at {:.1} ms", since_start_ms());
+}
+
 pub fn report(name: &str, value: f64, unit: &str) {
     println!("measure {name}={value:.1} {unit}");
 }
