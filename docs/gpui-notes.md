@@ -259,3 +259,18 @@ decides. Custom animations (the graph camera) check `cx.reduce_motion()` themsel
 
 `futures::executor::block_on(task)` on a GPUI `Task` in a test deadlocks: the task needs the test executor to
 run. Use `cx.foreground_executor().block_test(task)`.
+
+## Building actions by name
+
+`cx.build_action(name, None)` fails with "cannot be built from JSON" for actions declared with
+`#[action(no_json)]` (structs with fields such as `OpenSchemaGraph { connection }`). The app's `--command`
+falls back to the command palette's registry (`palette::CommandRegistry`), which holds a default instance of
+every registered command; reuse that instead of adding JSON support.
+
+## Scripted UI states need time
+
+`--run`, `--ask` and `--command` fire on the first frame, before a connection is up, the schema is loaded or
+focus has settled in a new tab. States that depend on those (debug sessions, the schema graph, a schema-checked
+assistant card) need `--command-delay SECONDS`. On KDE, `cargo xtask screenshot` activates the Gremliner window
+through a KWin script before `spectacle -a`, but check that the PNG is the app's size (1570×1058 at the default
+window size) when the delay is long; focus can still move.

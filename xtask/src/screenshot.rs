@@ -339,6 +339,7 @@ fn capture(out: &Path) -> Result<()> {
     let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
     let out_str = out.to_string_lossy().to_string();
     if desktop.contains("KDE") && has("spectacle") {
+        kde_activate_app();
         return crate::run(
             "capture (spectacle)",
             Command::new("spectacle").args(["-b", "-n", "-a", "-o", &out_str]),
@@ -372,6 +373,54 @@ fn capture(out: &Path) -> Result<()> {
     bail!(
         "no screenshot tool found: install spectacle (KDE), grim (wlroots Wayland) or xdotool + imagemagick (X11)"
     )
+}
+
+/// Make the Gremliner window the active one through a KWin script, so `spectacle -a` captures it even
+/// when the user has clicked elsewhere during a long delay. Best effort: without `qdbus`, the window is
+/// active anyway unless focus moved.
+fn kde_activate_app() {
+    let Some(qdbus) = ["qdbus6", "qdbus"].into_iter().find(|b| has(b)) else {
+        return;
+    };
+    let script = std::env::temp_dir().join("gremliner-activate.js");
+    let js = r#"for (const w of workspace.windowList()) {
+    if (String(w.resourceClass).indexOf("gremliner") >= 0 && !w.resourceClass.includes("cli")) {
+        workspace.activeWindow = w;
+    }
+}"#;
+    if std::fs::write(&script, js).is_err() {
+        return;
+    }
+    let name = "gremliner-activate";
+    let call = |args: &[&str]| {
+        Command::new(qdbus)
+            .args(args)
+            .stderr(Stdio::null())
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+    };
+    let script_path = script.to_string_lossy();
+    if let Some(id) = call(&[
+        "org.kde.KWin",
+        "/Scripting",
+        "org.kde.kwin.Scripting.loadScript",
+        &script_path,
+        name,
+    ]) {
+        call(&[
+            "org.kde.KWin",
+            &format!("/Scripting/Script{id}"),
+            "org.kde.kwin.Script.run",
+        ]);
+        std::thread::sleep(Duration::from_millis(400));
+    }
+    call(&[
+        "org.kde.KWin",
+        "/Scripting",
+        "org.kde.kwin.Scripting.unloadScript",
+        name,
+    ]);
 }
 
 /// `x,y wxh` of the Gremliner window on sway or Hyprland.

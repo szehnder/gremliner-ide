@@ -44,6 +44,10 @@ struct Args {
     /// used by screenshots and agents to reach a UI state).
     #[arg(long = "command", value_name = "ACTION")]
     commands: Vec<String>,
+    /// Wait this many seconds after the first frame before `--ask` and `--command`s (for states that
+    /// need a connection, a loaded schema or query results first; the connection opens right away).
+    #[arg(long, value_name = "SECONDS", default_value_t = 0.0)]
+    command_delay: f32,
     /// Open a tab with this query and run it on startup (on `--open-connection`'s connection).
     #[arg(long, value_name = "GREMLIN")]
     run: Option<String>,
@@ -246,7 +250,10 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
                 let manager = ui_workspace::connections::ConnectionManager::global(cx);
                 connection = manager.read(cx).find_by_name(name).map(|c| c.id);
                 match connection {
-                    Some(id) if args.run.is_none() && args.ask.is_none() => {
+                    Some(id)
+                        if args.run.is_none()
+                            && (args.ask.is_none() || args.command_delay > 0.0) =>
+                    {
                         manager.update(cx, |m, cx| m.connect(id, cx)).detach()
                     }
                     Some(_) => {}
@@ -257,6 +264,7 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
             let ask = args.ask.clone();
             let workspace = workspace.clone();
             let measure_startup = args.measure_startup;
+            let command_delay = args.command_delay;
             let _ = handle.update(cx, |_, window, _| {
                 // Actions route through the rendered element tree, so they wait for the first frame.
                 window.on_next_frame(move |window, cx| {
@@ -270,15 +278,28 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
                         workspace
                             .update(cx, |ws, cx| ws.open_and_run(query, connection, window, cx));
                     }
-                    if let Some(prompt) = &ask {
-                        workspace
-                            .update(cx, |ws, cx| ws.open_and_ask(prompt, connection, window, cx));
-                    }
-                    for name in &commands {
-                        match cx.build_action(name, None) {
-                            Ok(action) => window.dispatch_action(action, cx),
-                            Err(err) => log::error!("--command {name:?}: {err}"),
+                    let workspace = workspace.clone();
+                    let commands = commands.clone();
+                    let ask = ask.clone();
+                    let later = move |window: &mut Window, cx: &mut App| {
+                        if let Some(prompt) = &ask {
+                            workspace.update(cx, |ws, cx| {
+                                ws.open_and_ask(prompt, connection, window, cx)
+                            });
                         }
+                        dispatch(&commands, window, cx);
+                    };
+                    if command_delay > 0.0 {
+                        window
+                            .spawn(cx, async move |cx| {
+                                cx.background_executor()
+                                    .timer(std::time::Duration::from_secs_f32(command_delay))
+                                    .await;
+                                let _ = cx.update(later);
+                            })
+                            .detach();
+                    } else {
+                        later(window, cx);
                     }
                 });
             });
@@ -286,6 +307,24 @@ fn open_workspace(args: &Args, geometry: Option<WindowGeometry>, cx: &mut App) {
         Err(err) => {
             log::error!("failed to open the main window: {err:#}");
             cx.quit();
+        }
+    }
+}
+
+/// Dispatch `--command` actions by name. Actions without a JSON form (`no_json`) are taken from the
+/// command palette's registry, which holds a default instance of each.
+fn dispatch(commands: &[String], window: &mut Window, cx: &mut App) {
+    for name in commands {
+        let action = cx.build_action(name, None).or_else(|err| {
+            ui_workspace::palette::CommandRegistry::commands(cx)
+                .iter()
+                .find(|c| c.action.name() == name.as_str())
+                .map(|c| c.action.boxed_clone())
+                .ok_or(err)
+        });
+        match action {
+            Ok(action) => window.dispatch_action(action, cx),
+            Err(err) => log::error!("--command {name:?}: {err}"),
         }
     }
 }
