@@ -11,11 +11,11 @@
 - [x] 2.2 `cargo xtask package` with the formats table, names, checksums, tag check and smoke test; verify `scenario_release_packaging_package_formats_per_platform`, `scenario_release_packaging_artifact_names_include_version_os_and_architecture`, `scenario_release_packaging_every_artifact_has_a_checksum`, `scenario_release_packaging_mismatched_tag_is_rejected`, `scenario_release_packaging_wrong_binary_fails_the_smoke_test`
 - [x] 2.3 `packaging/linux/Dockerfile` and `--docker`; verify `cargo xtask package --docker` produces the AppImage, `.deb` and `.tar.gz` in `target/packages/`, and `sha256sum -c` passes
 - [x] 2.4 Verify the AppImage launches the app on the dev machine, and the `.deb` installs in `ubuntu:22.04` and `gremliner-cli --version` runs
-- [ ] 2.5 `--universal` for macOS (lipo); verified by the release workflow's macOS job
+- [x] 2.5 `--universal` for macOS (lipo); verified by the release workflow's macOS job
 
 ## 3. CI and release
 
-- [ ] 3.1 `.github/workflows/release.yml` (tag → release; manual run → artifacts) and `packaging/release-notes.md`; verify a manual run is green on all three runners
+- [x] 3.1 `.github/workflows/release.yml` (tag → release; manual run → artifacts) and `packaging/release-notes.md`; verify a manual run is green on all three runners
 
 ## 4. Documentation
 
