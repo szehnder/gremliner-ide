@@ -13,8 +13,10 @@ Rust; the UI is GPUI via `gpui-kit`.
   - I/O: `gremlin-client`, `providers`, `llm`, `assistant`, `storage`
   - UI: `ui-theme` (tokens, ADR-0035), `graph-canvas`, `ui-editor`, `ui-results`, `ui-assistant`, `ui-workspace`, `gremliner` (binary)
   - headless: `gremliner-cli`
-- `xtask/`: `cargo xtask <ci|doctor|demo|testenv|bench|screenshot|spec-coverage|layering>`.
+- `xtask/`: `cargo xtask <ci|doctor|demo|testenv|bench|screenshot|package|spec-coverage|layering>`.
 - `testenv/`: Docker gremlin-server plus seed data (ADR-0026).
+- `packaging/`: the Linux packaging Docker image and the release notes template (ADR-0040). `.github/workflows/release.yml`
+  publishes installers when a `v<version>` tag is pushed.
 
 ## Workflow
 1. Pick the next unarchived change from `openspec/ROADMAP.md` (or `/opsx:propose` for new work).
@@ -42,6 +44,7 @@ cargo run -p gremliner               # the app
 cargo run -p gremliner-cli -- query --url ws://localhost:8182/gremlin "g.V().count()"
 cargo xtask bench --check            # performance budgets (ADR-0027); app measurements open windows: keep them visible
 cargo xtask bench --check --ci       # relative-only, no windows (what CI runs against the main baseline)
+cargo xtask package --docker         # Linux installers into target/packages (needs Docker; macOS: --universal)
 openspec list && openspec validate --all --strict
 ```
 

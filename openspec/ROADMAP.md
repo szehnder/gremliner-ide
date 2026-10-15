@@ -33,7 +33,8 @@ A milestone gate must pass before the next milestone starts.
 | 26 | M7 | `export` | export | |
 | 27 | M8 Polish | `polish-pass` | ux-quality | screenshot review of every surface |
 | 28 | M8 | `performance-budgets` | performance-budgets | all budgets enforced |
+| 29 | After v1 | `release-packaging` | release-packaging | installers for every platform on a GitHub Release |
 
 ## Later (not v1; propose when needed)
 `assistant-autonomous-agent`, `graphbinary`, `provider-janusgraph`, `provider-cosmosdb`, `provider-aerospike`,
-`ssh-ssm-tunnels`, `opencypher`, `dashboards`, `release-packaging`.
+`ssh-ssm-tunnels`, `opencypher`, `dashboards`.

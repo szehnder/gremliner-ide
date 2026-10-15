@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "Apache-2.0"
-repository = "https://github.com/seanzehnder/gremliner-ide"
+repository = "https://github.com/szehnder/gremliner-ide"
 
 [workspace.dependencies]
 # Internal crates (see docs/adr/0004 for layering rules)
@@ -123,3 +123,9 @@ debug = "line-tables-only"
 
 [profile.bench]
 inherits = "release"
+
+# Release packages (ADR-0040): the release profile without debug info, stripped. 307 MB → 61 MB for the app.
+[profile.dist]
+inherits = "release"
+debug = false
+strip = "symbols"

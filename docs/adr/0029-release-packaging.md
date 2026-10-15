@@ -1,6 +1,6 @@
 # 0029. Release packaging with cargo-dist
 
-- Status: accepted
+- Status: superseded by [0040](0040-installers-with-cargo-packager.md)
 - Date: 2026-10-11
 
 ## Context

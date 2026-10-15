@@ -5,6 +5,7 @@ mod demo;
 mod doctor;
 mod grammar;
 mod layering;
+mod package;
 mod screenshot;
 mod spec_coverage;
 mod testenv;
@@ -35,6 +36,18 @@ enum Cmd {
     Doctor,
     /// Start the sample gremlin-server (Docker, air-routes) and open the app connected to it.
     Demo,
+    /// Build release installers for this OS into target/packages (ADR-0040; needs cargo-packager).
+    Package {
+        /// Build the Linux packages inside packaging/linux/Dockerfile (portable to glibc 2.35+).
+        #[arg(long)]
+        docker: bool,
+        /// macOS: one universal (arm64 + x86_64) build.
+        #[arg(long)]
+        universal: bool,
+        /// Refuse to build unless this release tag equals `v<workspace version>`.
+        #[arg(long)]
+        tag: Option<String>,
+    },
     /// Check crate layering rules (ADR-0004).
     Layering,
     /// Check UI code uses design tokens instead of raw colours/sizes (ADR-0023).
@@ -110,6 +123,18 @@ fn main() -> Result<()> {
         Cmd::Ci { no_test } => ci(&root, no_test),
         Cmd::Doctor => doctor::run(),
         Cmd::Demo => demo::run(&root),
+        Cmd::Package {
+            docker,
+            universal,
+            tag,
+        } => package::run(
+            &root,
+            package::Options {
+                docker,
+                universal,
+                tag,
+            },
+        ),
         Cmd::Layering => layering::check(&root),
         Cmd::Tokens => tokens::check(&root),
         Cmd::SpecCoverage { enforce } => spec_coverage::run(&root, enforce),

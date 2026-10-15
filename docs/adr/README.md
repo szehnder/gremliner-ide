@@ -32,7 +32,7 @@ One decision per file, MADR-style (see [0001](0001-record-architecture-decisions
 | [0026](0026-gremlin-server-docker-testenv.md) | TinkerPop gremlin-server in Docker as the test environment and Neptune stand-in | accepted |
 | [0027](0027-performance-budgets.md) | Performance budgets as CI gates | accepted |
 | [0028](0028-no-telemetry.md) | No telemetry; local-only diagnostics | accepted |
-| [0029](0029-release-packaging.md) | Release packaging with cargo-dist | accepted |
+| [0029](0029-release-packaging.md) | Release packaging with cargo-dist | superseded by 0040 |
 | [0030](0030-parameters-as-bindings.md) | Query parameters are sent as native bindings | accepted |
 | [0031](0031-x86-64-v2-baseline.md) | x86-64-v2 as the minimum x86 CPU target | accepted |
 | [0032](0032-raster-level-of-detail.md) | Raster level of detail for dense graph views | accepted |
@@ -43,3 +43,4 @@ One decision per file, MADR-style (see [0001](0001-record-architecture-decisions
 | [0037](0037-localstack-discovery-details.md) | LocalStack Neptune discovery details and engine version table (amends 0017) | accepted |
 | [0038](0038-resvg-for-image-export.md) | Graph image export through SVG and resvg (amends 0006) | accepted |
 | [0039](0039-hybrid-gpu-driver-selection.md) | Hide unused discrete-GPU drivers on hybrid Linux laptops (amends 0027) | accepted |
+| [0040](0040-installers-with-cargo-packager.md) | Installers built with cargo-packager on native CI runners, Linux in Docker (supersedes 0029) | accepted |

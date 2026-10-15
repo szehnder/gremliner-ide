@@ -8,9 +8,12 @@ Gremlin Server or Amazon Neptune, with an AI assistant that checks every query a
 you see it.
 
 [![CI](https://github.com/szehnder/gremliner-ide/actions/workflows/ci.yml/badge.svg)](https://github.com/szehnder/gremliner-ide/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/szehnder/gremliner-ide)](https://github.com/szehnder/gremliner-ide/releases/latest)
 ![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Rust](https://img.shields.io/badge/rust-1.99-orange)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20macOS%20%C2%B7%20Windows-lightgrey)
+
+**[Download for macOS, Windows or Linux](https://github.com/szehnder/gremliner-ide/releases/latest)**
 
 ![Gremliner debugging a traversal over air-routes: per-step traverser counts, with the current step's results drawn as a graph](docs/screenshots/debugger.png)
 
@@ -85,9 +88,43 @@ and a reduce-motion setting that follows your OS.
 |---|---|
 | ![Graph view, light theme](docs/screenshots/graph-light.png) | ![Command palette, dark theme](docs/screenshots/palette.png) |
 
-## Quick start
+## Download
 
-Gremliner builds from source today; there are no prebuilt binaries yet.
+Installers are on the [Releases page](https://github.com/szehnder/gremliner-ide/releases/latest). You don't
+need Rust or any developer tools.
+
+| System | File | |
+|---|---|---|
+| macOS 11+ (Apple silicon and Intel) | `Gremliner-<version>-macos-universal.dmg` | Open it and drag Gremliner to Applications |
+| Windows 10/11 (x64) | `Gremliner-<version>-windows-x86_64-setup.exe` | Installs for your user; no admin rights |
+| Linux, any distro (x64) | `Gremliner-<version>-linux-x86_64.AppImage` | `chmod +x` it, then run it |
+| Debian, Ubuntu (x64) | `Gremliner-<version>-linux-x86_64.deb` | `sudo apt install ./Gremliner-<version>-linux-x86_64.deb` |
+| Anything else | `.tar.gz` / `.zip` | Both programs, ready to run |
+
+Every package has the desktop app (`gremliner`) and the [headless CLI](#headless-cli) (`gremliner-cli`), plus a
+`.sha256` checksum beside it.
+
+**First launch.** The builds aren't code-signed yet, so you'll see a warning once:
+
+- **macOS:** right-click Gremliner in Applications and choose **Open**. If that doesn't help, go to
+  **System Settings → Privacy & Security** and click **Open Anyway**, or run
+  `xattr -dr com.apple.quarantine /Applications/Gremliner.app`.
+- **Windows:** SmartScreen says it "protected your PC". Click **More info → Run anyway**.
+
+**Requirements.**
+- Linux needs glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 36+) and a Vulkan driver.
+- x86_64 needs a CPU from about 2009 or later ([x86-64-v2](docs/adr/0031-x86-64-v2-baseline.md)).
+
+**Something to connect to.** If you don't have a Gremlin database at hand, start TinkerPop's server with its
+small sample graph and connect to `ws://localhost:8182/gremlin`:
+
+```sh
+docker run -p 8182:8182 tinkerpop/gremlin-server:3.7.3 conf/gremlin-server-modern.yaml
+```
+
+## Build from source
+
+For contributors, or to try the larger demo with air-routes:
 
 ```sh
 git clone https://github.com/szehnder/gremliner-ide && cd gremliner-ide
@@ -220,13 +257,18 @@ Measured on a Ryzen laptop with integrated graphics:
 - **"Passwords will be kept for this session only".** No Secret Service is running (some minimal Linux
   setups). Install and unlock `gnome-keyring` or KWallet, or set `GREMLINER_SECRET_STORE=memory` to silence it.
 - **The demo can't connect.** Check `cargo xtask testenv status`. Port 8182 must be free.
+- **The AppImage won't start** and mentions FUSE. Install `libfuse2` (`libfuse2t64` on Ubuntu 24.04), or run it
+  with `--appimage-extract-and-run`.
+- **macOS says the app is damaged, or Windows says it protected your PC.** The builds are unsigned; see
+  [First launch](#download).
 - **Start over.** Pass `--data-dir /some/empty/dir` (app and CLI), or `--no-persist` (app) for a throwaway session.
 
 ## Status
 
 Version 0.1. All the features above are implemented and covered by tests. Linux is the primary platform
 (daily use on KDE Plasma, Wayland). macOS and Windows build in CI but have had less hands-on use.
-There are no packaged releases yet. Not yet supported: GraphBinary, JanusGraph-specific and Cosmos DB providers,
+Installers for all three platforms are on the [Releases page](https://github.com/szehnder/gremliner-ide/releases);
+they are not code-signed yet. Not yet supported: GraphBinary, JanusGraph-specific and Cosmos DB providers,
 openCypher, and SSH tunnels managed by the app.
 
 ## Contributing
@@ -236,7 +278,7 @@ The project is spec-driven and written to be worked on by people and AI coding a
 | Path | What |
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | How to work in this repo: layering rules, workflow, commands |
-| [`docs/adr/`](docs/adr/README.md) | 39 architecture decisions, one per file |
+| [`docs/adr/`](docs/adr/README.md) | 40 architecture decisions, one per file |
 | [`openspec/specs/`](openspec/specs/) | The behaviour of every capability, as requirements and scenarios |
 | [`openspec/ROADMAP.md`](openspec/ROADMAP.md) | The order features were built in |
 | [`docs/gpui-notes.md`](docs/gpui-notes.md) | Hard-won notes on GPUI and gpui-kit |
@@ -249,7 +291,22 @@ cargo xtask ci                                   # fmt, clippy, layering, design
 cargo xtask testenv up && cargo xtask testenv seed  # Docker servers the integration tests use
 cargo xtask bench --check                        # performance budgets (opens windows: keep them visible)
 cargo xtask screenshot --all-surfaces            # light and dark screenshots of every surface
+cargo xtask package --docker                     # Linux installers into target/packages (macOS: --universal)
 ```
+
+### Releasing
+
+Installers are built by CI ([ADR-0040](docs/adr/0040-installers-with-cargo-packager.md),
+[`release.yml`](.github/workflows/release.yml)). To publish one, set `version` in the root `Cargo.toml`, commit,
+then push a matching tag:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+CI builds the macOS, Windows and Linux packages and creates the GitHub Release with
+[these notes](packaging/release-notes.md). Running the workflow by hand from the Actions tab builds the same
+packages as downloadable artifacts, without publishing anything.
 
 ## License
 

@@ -100,6 +100,14 @@ pub fn run() -> Result<()> {
         ),
     }
 
+    match output("cargo", &["packager", "--version"]) {
+        Some(v) => r.ok("cargo-packager", &v),
+        None => r.optional(
+            "cargo-packager",
+            "installers with `cargo xtask package` (ADR-0040): `cargo install cargo-packager --locked`",
+        ),
+    }
+
     println!();
     if r.problems > 0 {
         bail!("{} required item(s) missing; see MISS above", r.problems);
