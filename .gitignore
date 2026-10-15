@@ -5,3 +5,4 @@
 *.profraw
 /.env
 perf-baseline.json
+.envrc
