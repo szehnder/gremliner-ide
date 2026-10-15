@@ -45,6 +45,8 @@ Vulkan, Wayland and fonts at run time. SQLite is bundled. x86_64 builds target x
   and `--target`. Its `--binaries-dir` flag is parsed but ignored in 0.11.8.
 - **macOS universal:** build `aarch64-apple-darwin` and `x86_64-apple-darwin`, combine them with `lipo` into
   `target/universal-apple-darwin/dist`, and run cargo-packager with `--target universal-apple-darwin`.
+- **Windows subsystem:** release builds of the app use `windows_subsystem = "windows"`, so no console window
+  opens beside it. Output on Windows comes from `gremliner-cli`.
 - **Desktop entry:** `packaging/linux/gremliner.desktop` replaces cargo-packager's default to add
   `StartupWMClass=gremliner` (the window's app id) and search keywords. The AppImage uses it too.
 - **Smoke test:** run the packaged `gremliner-cli --version` (from the staged archive) and require the

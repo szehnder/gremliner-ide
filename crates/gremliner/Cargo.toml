@@ -35,7 +35,8 @@ authors = ["Gremliner contributors <szehnder@users.noreply.github.com>"]
 category = "DeveloperTool"
 copyright = "Copyright 2026 Gremliner contributors. Apache-2.0."
 licenseFile = "../../LICENSE"
-icons = ["../../assets/icon/png/32x32.png", "../../assets/icon/png/64x64.png", "../../assets/icon/png/128x128.png", "../../assets/icon/png/256x256.png", "../../assets/icon/png/512x512.png", "../../assets/icon/png/1024x1024.png"]
+# macOS .icns accepts 1024 px only as a 2x image, named with @2x (icns IconType table).
+icons = ["../../assets/icon/png/32x32.png", "../../assets/icon/png/64x64.png", "../../assets/icon/png/128x128.png", "../../assets/icon/png/256x256.png", "../../assets/icon/png/512x512.png", "../../assets/icon/png/512x512@2x.png"]
 longDescription = "A native desktop IDE for Gremlin (Apache TinkerPop): graph view, step-through debugger, schema-checked natural-language assistant, Gremlin Server and Amazon Neptune."
 binaries = [{ path = "gremliner", main = true }, { path = "gremliner-cli", main = false }]
 

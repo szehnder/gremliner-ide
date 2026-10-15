@@ -3,6 +3,10 @@
 //! Normal runs open the workspace shell. `--graph-demo` and `--render-bench` open the bare graph canvas
 //! used by the rendering gate (ADR-0006, ADR-0032).
 
+// Release builds on Windows are GUI-subsystem programs, so launching from the Start menu doesn't also open a
+// console window (ADR-0040). Their stdout goes nowhere; `gremliner-cli` is the terminal tool there.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod gpu;
 mod measure;
 
