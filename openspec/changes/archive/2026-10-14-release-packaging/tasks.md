@@ -19,10 +19,10 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 README: Download section, first launch of unsigned apps, system requirements, how to cut a release; AGENTS.md lists `cargo xtask package`; ROADMAP lists this change; verify by reading the rendered README on GitHub
+- [x] 4.1 README: Download section, first launch of unsigned apps, system requirements, how to cut a release; AGENTS.md lists `cargo xtask package`; ROADMAP lists this change; verify by reading the rendered README on GitHub
 
 ## 5. Verification
 
 - [x] 5.1 `cargo xtask ci` is green
 - [x] 5.2 `openspec validate release-packaging --strict` passes
-- [ ] 5.3 Tag `v0.1.0`; verify the GitHub Release lists every package and its checksum
+- [x] 5.3 Tag `v0.1.0`; verify the GitHub Release lists every package and its checksum
